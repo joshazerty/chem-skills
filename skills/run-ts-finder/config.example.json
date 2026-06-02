@@ -1,0 +1,13 @@
+{
+  "_comment": "Optional per-project overrides. The driver reads CLI flags; these document the knobs. Copy to config.json and source the env vars, or just pass the flags.",
+  "charge": -1,
+  "mult": 1,
+  "nnodes": 9,
+  "gaussian_route": "#p B3LYP/gen pseudo=read EmpiricalDispersion=GD3BJ Int=UltraFine SCF=(MaxCycle=512,XQC) SCRF=(PCM,Solvent=1-Pentanol) Opt=(TS,CalcFC,NoEigen,MaxCycles=200) Freq",
+  "orca_route": "! B3LYP D3BJ def2-SVP def2/J OptTS NumFreq CPCM(Pentanol)",
+  "queue": "m0311",
+  "env": {
+    "GXTB": "/home/joshua/bins/gxtb/xtb-6.7.1/bin/xtb",
+    "GSM_INFRA": "/home/joshua/dodh/ts/_gsm_infra"
+  }
+}
