@@ -1,13 +1,35 @@
 {
-  "_comment": "Optional per-project overrides. The driver reads CLI flags; these document the knobs. Copy to config.json and source the env vars, or just pass the flags.",
-  "charge": -1,
+  "_comment": "Copy to config.json (same dir as driver.py, or point $RUN_TS_FINDER_CONFIG at it) and edit for your site. Every key is optional; CLI flags override config, config overrides built-in defaults. Keys starting with _ are ignored.",
+
+  "_gxtb": "g-xTB-enabled xtb binary: a name on PATH or an absolute path. MUST be an analytic-gradient build (g-xTB v2.0.0+) — confirm with `driver.py setup-gxtb`. Env var $GXTB overrides.",
+  "gxtb": "/opt/gxtb/bin/xtb",
+
+  "_gsm_infra": "Directory containing the molecularGSM `gsm.orca` binary and `tm2orca.py` (https://github.com/ZimmermanGroup/molecularGSM). An `inpfileq_template` here overrides the bundled one. Env var $GSM_INFRA overrides.",
+  "gsm_infra": "/opt/gsm",
+
+  "_extra_lib_paths": "Prepended to LD_LIBRARY_PATH when running gsm.orca / g-xTB (e.g. the MKL lib dir your gsm.orca build links against).",
+  "extra_lib_paths": ["/opt/intel/oneapi/mkl/latest/lib/intel64"],
+
+  "_defaults": "System defaults; always overridable per run with --charge/--mult/--nnodes.",
+  "charge": 0,
   "mult": 1,
   "nnodes": 9,
-  "gaussian_route": "#p B3LYP/gen pseudo=read EmpiricalDispersion=GD3BJ Int=UltraFine SCF=(MaxCycle=512,XQC) SCRF=(PCM,Solvent=1-Pentanol) Opt=(TS,CalcFC,NoEigen,MaxCycles=200) Freq",
-  "orca_route": "! B3LYP D3BJ def2-SVP def2/J OptTS NumFreq CPCM(Pentanol)",
-  "queue": "m0311",
-  "env": {
-    "GXTB": "/home/joshua/bins/gxtb/xtb-6.7.1/bin/xtb",
-    "GSM_INFRA": "/home/joshua/dodh/ts/_gsm_infra"
-  }
+
+  "_routes": "Project level of theory. `refine --route` overrides per run. If the Gaussian route uses gen/pseudo=read you must append basis/ECP blocks to the generated input by hand (the driver warns).",
+  "gaussian_route": "#p B3LYP/def2SVP EmpiricalDispersion=GD3BJ Int=UltraFine SCF=(MaxCycle=512,XQC) Opt=(TS,CalcFC,NoEigen,MaxCycles=200) Freq",
+  "orca_route": "! B3LYP D3BJ def2-SVP def2/J OptTS NumFreq",
+  "irc_opts": "CalcFC,MaxPoints=30,StepSize=10,Both",
+  "endpoint_opt": "Opt=(CalcFC,MaxCycles=200) Freq",
+
+  "_submit": "Shell templates run (in a login shell, from the input's directory) by `--submit`. Placeholders: {input} = input basename, {dir}, {mem}, {cpus}, {queue}. Leave empty to have the driver just write inputs and print them.",
+  "submit": {
+    "gaussian": "subg16 --memory {mem} --cpus {cpus} --queue {queue} --input {input}",
+    "orca": "suborca --input {input} --memory {mem} --cpus {cpus} --queue {queue}"
+  },
+  "queue": "main",
+  "mem_gb": 32,
+  "cpus": 8,
+
+  "_scheduler": "Batch system for `escalate` job scaffolds: pbs or slurm.",
+  "scheduler": "pbs"
 }

@@ -11,81 +11,80 @@ is the right one**. Pipeline: get near the saddle cheaply with **g-xTB + GSM**
 project level of theory, then run the **verification cascade** — NImag=1, the
 imaginary mode *looks like the reaction*, IRC both directions, and endpoint opts
 that land on the intended reactant/product. When a run gets stuck it escalates
-(GSM-coupled-to-QM / QST2) and **records the fix** so the skill improves.
+(GSM-coupled-to-QM) and **records the fix** so the skill improves.
 
-Everything is driven by one script:
+Everything is driven by one self-contained script (Python 3.8+ stdlib;
+matplotlib optional for plots):
 **`~/.claude/skills/run-ts-finder/driver.py`** (call it `$D` below).
 It is the harness — a markdown file can't run GSM. Each subcommand prints
-`PASS`/`FAIL`/`WARN` so you can branch.
+`PASS`/`FAIL`/`WARN` so you can branch on results.
 
 ```bash
 D=~/.claude/skills/run-ts-finder/driver.py
 python3 $D -h          # list subcommands
+python3 $D selftest    # parser sanity check — runs anywhere, no chemistry software needed
 ```
 
-## Prerequisites (verified present on this machine)
+## Site setup (do this once per machine)
 
-- **gautools** installed editable (`python3 -c "import gautools"` works); provides
-  `gau2xyz/ts2irc/irc2opt/xyz2inp/gau-status/gau-energy` and the parsers the driver reuses.
-- **g-xTB v2.0.1** with **analytic gradients** at `/home/joshua/bins/gxtb/xtb-6.7.1/bin/xtb`
-  (see Setup — this is non-negotiable; see Gotchas for why).
-- **GSM infra** at `/home/joshua/dodh/ts/_gsm_infra/` (`gsm.orca`, `tm2orca.py`, templates).
-- **MKL** at `/opt/intel/oneapi/intelpython/python3.12/lib` (gsm.orca links `libmkl_rt.so.2`).
-- **QM backends + queue**: Gaussian via `subgau16`, ORCA via `/home/janko/Scripts/suborc6`,
-  live Torque (`qsub`/`qstat`), default queue `m0311`.
+All machine specifics live in **`config.json`** next to the driver (copy
+`config.example.json` and edit; `$RUN_TS_FINDER_CONFIG` can point elsewhere).
+Precedence: CLI flags > environment (`$GXTB`, `$GSM_INFRA`) > config.json > defaults.
 
-## Setup — g-xTB v2.0.1 (analytic gradients)
+What the config names:
 
-The local build must be the analytic-gradient one. Install (idempotent; keeps the
-tarball for provenance):
+- **`gxtb`** — an xtb binary with **g-xTB v2.0.0+ (analytic gradients)**.
+  Get it from https://github.com/grimme-lab/g-xtb/releases (the
+  `xtb-*-gxtb-*-linux-x86_64.tar.xz` asset; verify the `.sha256`).
+- **`gsm_infra`** — a directory with the **molecularGSM** `gsm.orca` binary and
+  `tm2orca.py` (https://github.com/ZimmermanGroup/molecularGSM). A default
+  `inpfileq_template` is bundled with the skill; a site copy in `gsm_infra`
+  overrides it.
+- **`extra_lib_paths`** — lib dirs `gsm.orca` needs (e.g. MKL, if it links `libmkl_rt`).
+- **`gaussian_route` / `orca_route`** — the project level of theory.
+- **`submit.gaussian` / `submit.orca`** — your site's queue-submit command
+  templates (`{input} {mem} {cpus} {queue}` placeholders). Empty = the driver
+  writes inputs and prints them; you submit your usual way.
+
+Then check everything and confirm the g-xTB build:
 
 ```bash
-cd /home/joshua/bins/gxtb
-curl -fL -o gxtb-v2.0.1.tar.xz \
-  https://github.com/grimme-lab/g-xtb/releases/download/v2.0.1/xtb-6.7.1-gxtb-140526-linux-x86_64.tar.xz
-curl -fsL -o gxtb-v2.0.1.tar.xz.sha256 \
-  https://github.com/grimme-lab/g-xtb/releases/download/v2.0.1/xtb-6.7.1-gxtb-140526-linux-x86_64.tar.xz.sha256
-sha256sum -c gxtb-v2.0.1.tar.xz.sha256 2>/dev/null || \
-  diff <(sha256sum gxtb-v2.0.1.tar.xz | cut -d' ' -f1) <(cut -d' ' -f1 gxtb-v2.0.1.tar.xz.sha256)
-tar -xf gxtb-v2.0.1.tar.xz     # extracts in place to ./xtb-6.7.1/ (existing refs keep working)
+python3 $D doctor       # PASS/FAIL per prerequisite — fix FAILs before running
+python3 $D setup-gxtb   # PASS ANALYTIC gradients confirmed (behavioural test)
 ```
 
-Then **confirm analytic gradients** (do not trust `--version`; v2.0.1 still says "6.7.1"):
-
-```bash
-python3 ~/.claude/skills/run-ts-finder/driver.py setup-gxtb
-# PASS ANALYTIC gradients confirmed (analytic component breakdown, single SCF)
-```
+`setup-gxtb` matters: **do not trust `--version`** — g-xTB releases keep the base
+xtb version label. The driver proves analytic gradients behaviourally (single
+SCF, analytic component breakdown; see Gotchas).
 
 ## Run (agent path)
 
-Full flow, each step verified in-container. `$D = ~/.claude/skills/run-ts-finder/driver.py`.
+Full flow, each step verified. `$D = ~/.claude/skills/run-ts-finder/driver.py`.
 
-**1 — GSM string from two endpoint XYZ files** (identical atom order required; linear
-inputs are auto-perturbed). Writes `scratch/tsq0000.xyz` and a `string_profile.png`.
+**1 — GSM string from two endpoint XYZ files** (identical atom order required;
+strictly-linear inputs are auto-perturbed). Writes `scratch/tsq0000.xyz` and a
+`string_profile.png`.
 
 ```bash
-python3 $D gsm reactant.xyz product.xyz --charge -1 --mult 1 --nnodes 9 --workdir ./gsm_run
+python3 $D gsm reactant.xyz product.xyz --charge 0 --mult 1 --nnodes 9 --workdir ./gsm_run
 # PASS exact-TS wrote tsq.xyz → ./gsm_run/scratch/tsq0000.xyz   (+ string_profile.png)
 ```
 
-For a quick sanity check the demo uses HCN→HNC (`--charge 0 --nnodes 7`); it
-converges in seconds and is the fastest way to confirm the whole chain works.
+For a quick sanity check use HCN→HNC (`--charge 0 --nnodes 7`); it converges in
+seconds and is the fastest way to confirm the whole chain works on a new machine.
 
 **2 — Refine to a real saddle** at the project level of theory. Pick a backend;
-`--submit` actually queues it (omit to just generate the input and print the submit line).
+`--submit` queues it via your configured template (omit to just generate the
+input and print the submit line).
 
 ```bash
-# Gaussian (project default route is baked in; override with --route)
-python3 $D refine ./gsm_run/scratch/tsq0000.xyz --backend gaussian --charge -1 --mult 1 --submit
-# ORCA (uses suborc6)
-python3 $D refine ./gsm_run/scratch/tsq0000.xyz --backend orca --charge -1 --mult 1 --submit
-# → prints the queue id, e.g. "subgau16 job id: 717736.diracgw"
-#   (verified end-to-end: a 3-atom test TS ran to Normal termination, NImag=1,
-#    imaginary-mode↔reaction-vector overlap |cos|=0.99. Submit from $HOME, not /tmp.)
+python3 $D refine ./gsm_run/scratch/tsq0000.xyz --backend gaussian --charge 0 --mult 1 --submit
+python3 $D refine ./gsm_run/scratch/tsq0000.xyz --backend orca     --charge 0 --mult 1 --submit
+# → writes <run>_tsq.inp (gaussian) / <run>_tsq_orca.inp (orca), prints the queue id if submitted
 ```
 
-**3 — Verify the saddle** (the point of the skill). Run on the freq log:
+**3 — Verify the saddle** (the point of the skill). Works on Gaussian logs AND
+ORCA outputs:
 
 ```bash
 python3 $D verify ts.log [--reactant reactant.xyz --product product.xyz]
@@ -96,92 +95,99 @@ python3 $D verify ts.log [--reactant reactant.xyz --product product.xyz]
 
 It reports the dominant atomic motion and which bonds change along the imaginary
 mode so you can confirm it *looks like the reaction*. With `--reactant/--product`
-(matching atom order) it also prints `|cos(mode, product−reactant)|`.
+(matching atom order) it also prints `|cos(mode, product−reactant)|` — expect >0.5
+for the right saddle.
 
-**4 — IRC both directions, then endpoint opts** (thin gautools wrappers):
+**4 — IRC both directions, then endpoint opts:**
 
 ```bash
-python3 $D irc ts.log            # → ts_irc.inp  (IRC=(CalcFC,MaxPoints=30,StepSize=10,Both))
+python3 $D irc ts.log            # → ts_irc.inp  (Gaussian IRC=(CalcFC,MaxPoints=30,StepSize=10,Both),
+                                 #    or ORCA `! ... IRC`, reusing ts.hess if present)
 # submit, wait, then:
-python3 $D endpoints ts_irc.log  # → *_irc_rev.inp and *_irc_fwd.inp (Opt=(CalcFC,MaxCycles=200) Freq)
+python3 $D endpoints ts_irc.log  # → *_irc_fwd.inp / *_irc_rev.inp endpoint Opt+Freq inputs
+                                 #   (ORCA: picks up the <base>_IRC_F.xyz/_IRC_B.xyz files)
 ```
 
-Optimise both endpoints and confirm `NImag=0` and that each matches the intended
-reactant/product (use `status`).
+Optimise both endpoints and confirm `NImag=0` (`verify` again) and that each
+matches the intended reactant/product (use `status`).
 
 **5 — Progress / energetics:**
 
 ```bash
-python3 $D status ./gsm_run      # gau-status table + gau-energy ΔG (wraps gautools)
+python3 $D status ./gsm_run      # per-file table: backend, termination, NImag, E, G (+ GSM barrier)
 ```
 
-**Self-improvement.** When you find a fix that works, record it — it appends to the
-**Workarounds** section at the bottom of this file AND to `LEARNINGS.md`:
+**Self-improvement.** When you find a fix that works, record it — it appends to
+the **Workarounds** section at the bottom of this file AND to `LEARNINGS.md`:
 
 ```bash
-python3 $D record "GSM exact-TS stalled with SCF failures on the cationic 6m endpoint" \
+python3 $D record "GSM exact-TS stalled with SCF failures on the cationic endpoint" \
                   "Pre-relaxed the product fragment with xtb --gxtb --opt before building the string"
 ```
 
-**Stuck?** Escalate to a QM-level string (queue-only; scaffolded):
+**Stuck?** Escalate to a QM-level string (queue-only; scaffolded for PBS or SLURM):
 
 ```bash
-python3 $D escalate ./gsm_run    # writes gsm.job; edit ograd to call subgau16/suborc6, then qsub
+python3 $D escalate ./gsm_run --scheduler slurm   # writes gsm.job; edit ograd to call
+                                                  # your QM backend per node, then sbatch/qsub
 ```
 
 ## Backends
 
 | | Gaussian | ORCA |
 |---|---|---|
-| submit | `subgau16 --memory 32 --cpus 8 --queue m0311 --input x.inp` | `/home/janko/Scripts/suborc6 --input x.inp --memory 32 --cpus 8 --queue m0311` |
-| TS route | `Opt=(TS,CalcFC,NoEigen,MaxCycles=200) Freq` | `! ... OptTS NumFreq` + `%geom Calc_Hess true end` |
-| ran end-to-end | **yes** — g16 TS+Freq → Normal termination, NImag=1 | **yes** — ORCA 6.0.1 OptTS+Freq → TERMINATED NORMALLY, NImag=1 (−1267 cm⁻¹) |
-| `driver.py verify` | **parses g16 logs** (NImag, mode, overlap) | not parsed — read NImag from the ORCA `.out` (`grep '\*\*\*imaginary mode'`) |
+| TS route (default) | `Opt=(TS,CalcFC,NoEigen,MaxCycles=200) Freq` | `! ... OptTS NumFreq` + `%geom Calc_Hess true end` |
+| submit | `submit.gaussian` template from config.json | `submit.orca` template from config.json |
+| `verify` | parses logs: NImag, imaginary mode, overlap | parses outputs: NImag, imaginary mode, overlap |
+| `irc` / `endpoints` | IRC=(…,Both) input; endpoint geoms from the log | `! ... IRC` input (reuses `.hess`); endpoints from `_IRC_F/_IRC_B.xyz` |
 
-Charge/mult/route/solvent are CLI flags (defaults: charge −1, mult 1, B3LYP-D3BJ/
-def2SVP+SDD(Re)/PCM(1-Pentanol) — the DODH project level). Override per project.
+Charge/mult/route/queue are CLI flags with config.json defaults (built-in
+fallback: charge 0, mult 1, B3LYP-D3BJ/def2-SVP). Set your project level of
+theory in config.json; override per run with `--route`.
 
 ## Gotchas (battle scars)
 
-- **g-xTB MUST be the analytic-gradient build (v2.0.0+).** The local build was
-  compiled 2026-04-21 — one day *before* v2.0.0 (the first analytic-gradient
-  release). GSM evaluates gradients thousands of times and the exact-TS step is
-  gradient-driven; v1.x numerical gradients (≈6N+1 SCFs each) are ~100× slower and
-  noisy, and the exact-TS optimiser converges to garbage. `setup-gxtb` asserts this.
-- **v2.0.1 still reports "xtb version 6.7.1".** `--version` cannot confirm the
-  update — the tell is the commit hash/date (`26dd68d`, 2026-05-14) and, decisively,
-  the *behaviour*: analytic component breakdown + sub-second `--gxtb --grad`.
-- **The v2.0.1 tarball extracts to `xtb-6.7.1/`** — the same dir name as the old
-  install, so it upgrades **in place**. Convenient (all existing `ograd`/CLAUDE.md
-  references keep resolving), but there is then no separate old-build fallback.
+- **g-xTB MUST be an analytic-gradient build (v2.0.0+).** GSM evaluates gradients
+  thousands of times and the exact-TS step is gradient-driven; v1.x numerical
+  gradients (≈6N+1 SCFs each) are ~100× slower and noisy, and the exact-TS
+  optimiser converges to garbage. `setup-gxtb` asserts this behaviourally.
+- **g-xTB releases keep the base xtb version label** (e.g. v2.0.1 still reports
+  "xtb version 6.7.1"), so `--version` cannot confirm an update — the tell is
+  the commit hash/date and, decisively, the *behaviour*: analytic component
+  breakdown + sub-second `--gxtb --grad` on a small molecule.
 - **NImag=1 is necessary, not sufficient.** A tiny imaginary (|ν| < ~100 cm⁻¹) is a
   floppy/spurious mode, not a reaction coordinate — `verify` WARNs on it. Always
   look at *what moves* in the imaginary mode, not just the count.
 - **GSM races on `scratch/gradient`** if `ograd` shares a work dir across parallel
-  node calls. The driver-generated `ograd` uses a per-id `wrk_<id>/` dir; `verify`/
-  GSM-report flags `mv: cannot stat 'scratch/gradient'` if a stale ograd reintroduces it.
-- **`gRMS: 0.0000` in gsm.out is a logging artefact** of this GSM build, not a real
-  zero gradient. The driver instead checks that per-node string energies *vary
-  between iterations* to confirm gradients are flowing.
+  node calls. The driver-generated `ograd` uses a per-id `wrk_<id>/` dir; the GSM
+  report flags `mv: cannot stat 'scratch/gradient'` if a stale ograd reintroduces it.
+- **`gRMS: 0.0000` in gsm.out is a logging artefact** of the molecularGSM build,
+  not a real zero gradient. The driver instead checks that per-node string energies
+  *vary between iterations* to confirm gradients are flowing.
 - **Strictly-linear endpoints (HCN, CO₂) crash GSM** with `bad spacings`/NaNs. The
   driver auto-perturbs atom 2 by 0.05 Å; for hand builds, bend each endpoint slightly.
-- **`subgau16` path-doubling:** passing an absolute `--input` path doubles the cwd
-  prefix and Gaussian fails instantly. The driver `cd`s into the input dir and
-  passes the basename via a login shell (`subgau16` is only on PATH in login shells).
-- **Submit from a SHARED filesystem, never `/tmp`.** `/tmp` is node-local: a job
-  submitted from `/tmp/...` is *accepted* (you get a job ID) but dies on the compute
-  node with `No such file or directory` for the `.inp`. Run from under `$HOME` or the
-  project dir. (Discovered in-container — see Workarounds.)
+- **Submit from a SHARED filesystem, never `/tmp`.** On most clusters `/tmp` is
+  node-local: a job submitted from `/tmp/...` is *accepted* (you get a job ID) but
+  dies on the compute node with `No such file or directory` for the `.inp`. Run
+  from under `$HOME` or the project dir — the driver WARNs if it sees this.
+- **Site submit wrappers often live only in login-shell PATHs.** The driver runs
+  submit templates via `bash -lc` from the input's directory and passes the
+  basename — some wrappers double the path prefix if handed an absolute path.
+- **`gen`/`pseudo=read` routes need hand-finishing.** The driver writes the
+  coordinates but cannot know your basis/ECP blocks; it WARNs so you append them
+  before submitting.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `setup-gxtb` says could not confirm analytic gradients | Re-run Setup; ensure `GXTB` points at the v2.0.1 binary. |
-| `error while loading shared libraries: libmkl_rt.so.2` | Driver sets `LD_LIBRARY_PATH`; if calling gsm.orca by hand, export `/opt/intel/oneapi/intelpython/python3.12/lib`. |
-| GSM: `Could not find tag for Default Info` | `inpfileq` missing the `QCHEM Scratch Info` block; use the template the driver copies. |
-| `verify`: "could not parse the normal-mode block" | The log lacks a standard Freq block — add `Freq` (or `Freq=HPModes`) and rerun. |
+| `doctor` FAILs on g-xTB / GSM infra | Fill in `config.json` (see Site setup); re-run `doctor` until clean. |
+| `setup-gxtb` says could not confirm analytic gradients | Install g-xTB v2.0.1+ from the grimme-lab releases; point `gxtb`/`$GXTB` at it. |
+| `error while loading shared libraries: libmkl_rt.so.2` | Add the MKL lib dir to `extra_lib_paths` in config.json. |
+| GSM: `Could not find tag for Default Info` | `inpfileq` missing the `QCHEM Scratch Info` block; use the bundled/site template (the driver copies it). |
+| `verify`: "could not parse the normal-mode block" | Gaussian: add `Freq` and rerun. ORCA: ensure the output has `VIBRATIONAL FREQUENCIES` + `NORMAL MODES` sections. |
 | No `tsq0000.xyz` after GSM | Read `gsm.out` for SCF failure / bad Hessian / race; rebuild endpoints cleaner or `escalate`. |
+| Job accepted but dies with `No such file or directory` | You submitted from `/tmp` or another node-local dir; move to a shared filesystem. |
 
 ## Run (human path)
 
@@ -191,12 +197,3 @@ The driver *is* the interface; do not try to "open" anything.
 ## Workarounds (self-recorded)
 
 _Appended by `driver.py record`. Newest first._
-### 2026-06-02 — Needed to confirm the ORCA backend actually executes for this user (suborc6 only proves the submit script parses)
-**Fix:** Verified: ORCA 6.0.1 via suborc6 from a $HOME dir ran OptTS+NumFreq to 'ORCA TERMINATED NORMALLY' with NImag=1; driver verify is Gaussian-only, so read ORCA NImag from the .out
-
-### 2026-06-02 — subgau16/suborc6 jobs were accepted (job IDs returned) but died on the compute node with 'No such file or directory' for the .inp
-**Fix:** Submit from a SHARED filesystem (under $HOME or the project dir), not /tmp — /tmp is node-local and invisible to compute nodes
-
-### 2026-06-02 — GSM exact-TS stalled: product fragment >300 kcal/mol uphill on g-xTB, climb walked past the saddle
-**Fix:** Pre-relaxed the product fragment with 'xtb prod.xyz --gxtb --opt' before concatenating endpoints; barrier sane, tsq converged
-

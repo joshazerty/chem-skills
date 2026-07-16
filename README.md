@@ -15,7 +15,7 @@ Each skill is a self-contained directory under [`skills/`](skills/) with a
 Symlink every skill into `~/.claude/skills/` so Claude Code auto-discovers them:
 
 ```bash
-git clone git@github.com:joshazerty/chem-skills.git
+git clone https://github.com/joshazerty/chem-skills.git
 cd chem-skills
 ./install.sh
 ```
@@ -24,16 +24,34 @@ cd chem-skills
 so the repo stays the single source of truth — edit here, the live skill updates.
 Re-run it after pulling new skills.
 
-## Environment notes
+## Per-site configuration
 
-These skills are tuned for **joshua's cluster** (Gaussian via `subgau16`, ORCA via
-`/home/janko/Scripts/suborc6`, g-xTB at `/home/joshua/bins/gxtb/...`, GSM infra at
-`/home/joshua/dodh/ts/_gsm_infra`, Torque queue `m0311`). On a different machine,
-override the paths the drivers expose — `run-ts-finder/driver.py` reads `GXTB` and
-`GSM_INFRA` from the environment, and charge/mult/route/queue are CLI flags. See
-each skill's `SKILL.md` Prerequisites + Gotchas.
+The skills are machine-agnostic: drivers are stdlib-only Python and read all
+site specifics (binary locations, queue-submit commands, level of theory) from
+a `config.json` next to the driver. To set up a new machine:
+
+```bash
+cd skills/run-ts-finder
+cp config.example.json config.json    # edit paths/routes/submit templates for your site
+python3 driver.py doctor              # PASS/FAIL per prerequisite
+python3 driver.py selftest            # parser tests — needs no chemistry software
+```
+
+`config.json` is gitignored, so site setups never leak into the repo.
+Environment variables (`$GXTB`, `$GSM_INFRA`, `$RUN_TS_FINDER_CONFIG`) and CLI
+flags override the config; see each skill's `SKILL.md` Site setup section.
 
 ## Adding a skill
 
 Drop a new `skills/<name>/` directory with a `SKILL.md` (frontmatter `name:` =
-`<name>`), commit, and re-run `./install.sh`.
+`<name>`), commit, and re-run `./install.sh`. Conventions the existing skills
+follow (worth keeping):
+
+- **A driver, not just prose** — `SKILL.md` tells the agent *what* to do;
+  a `driver.py` does it and prints `PASS`/`FAIL`/`WARN` for branching.
+- **Config over hardcoding** — site specifics live in a gitignored
+  `config.json` documented by a committed `config.example.json`.
+- **`doctor` + `selftest`** — a setup check for prerequisites and offline
+  parser tests, so the skill is testable before any real calculation runs.
+- **Self-improvement** — a `record` subcommand that appends discovered
+  workarounds to `SKILL.md` and `LEARNINGS.md`.
