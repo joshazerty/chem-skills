@@ -62,14 +62,22 @@ def load_config() -> dict:
             user = json.loads(path.read_text())
         except json.JSONDecodeError as e:
             sys.exit(f"FAIL config {path} is not valid JSON: {e}")
+        unknown = []
         for k, v in user.items():
             if k.startswith("_"):
+                continue
+            if k not in DEFAULTS:
+                unknown.append(k)
                 continue
             if k == "submit" and isinstance(v, dict):
                 cfg["submit"].update(v)
             else:
                 cfg[k] = v
         cfg["_config_path"] = str(path)
+        if unknown:
+            # typo protection: a misspelled key would otherwise be silently ignored
+            print(f"WARN {path.name}: unknown key(s) ignored: {', '.join(unknown)} "
+                  f"(valid: {', '.join(sorted(DEFAULTS))})", file=sys.stderr)
     if os.environ.get("GXTB"):
         cfg["gxtb"] = os.environ["GXTB"]
     if os.environ.get("GSM_INFRA"):
@@ -147,17 +155,10 @@ def gau_charge_mult(text: str):
     m = re.search(r"Charge\s*=\s*(-?\d+)\s+Multiplicity\s*=\s*(\d+)", text)
     return (int(m.group(1)), int(m.group(2))) if m else (None, None)
 
-def gau_last_geometry(text: str) -> list[Atom] | None:
-    span = None
-    for header in ("Standard orientation:", "Input orientation:"):
-        hits = [m.end() for m in re.finditer(re.escape(header), text)]
-        if hits:
-            span = text[hits[-1]:]
-            break
-    if span is None:
-        return None
+def _parse_orientation_at(lines: list[str], i: int) -> list[Atom] | None:
+    """Parse the orientation table whose header line is lines[i]."""
     atoms = []
-    for ln in span.splitlines()[1:]:
+    for ln in lines[i + 1:]:
         if re.match(r"^\s*-{5,}\s*$", ln):
             if atoms:
                 break
@@ -169,6 +170,14 @@ def gau_last_geometry(text: str) -> list[Atom] | None:
         elif atoms:
             break
     return atoms or None
+
+def gau_last_geometry(text: str) -> list[Atom] | None:
+    lines = text.splitlines()
+    for header in ("Standard orientation:", "Input orientation:"):
+        hits = [i for i, ln in enumerate(lines) if header in ln]
+        if hits:
+            return _parse_orientation_at(lines, hits[-1])
+    return None
 
 def gau_imag_mode(text: str):
     """First (most-negative) normal mode from the standard low-precision
@@ -324,7 +333,7 @@ def write_gaussian_input(path: Path, route: str, charge: int, mult: int,
     lines += [f" {a.symbol:2s} {a.x:14.8f} {a.y:14.8f} {a.z:14.8f}" for a in atoms]
     lines += ["", ""]
     path.write_text("\n".join(lines) + "\n")
-    if re.search(r"(?i)(^|[\s/])gen\b|pseudo\s*=\s*read", route):
+    if re.search(r"(?i)(^|[\s/])gen(ecp)?\b|pseudo\s*=\s*read", route):
         warn(f"route uses gen/pseudo=read — append the basis/ECP blocks to {path.name} before running")
 
 def write_orca_input(path: Path, route: str, charge: int, mult: int,
@@ -560,6 +569,14 @@ def cmd_verify(a):
     if not fr.normal_termination:
         warn("output did not terminate normally")
     nimag = len(fr.imaginary)
+    if a.expect_minimum:
+        # endpoint-opt verification: a minimum is the SUCCESS case here
+        if nimag == 0:
+            ok("NImag = 0 — confirmed minimum (endpoint)")
+            return 0
+        bad(f"NImag = {nimag} ({', '.join(f'{v:.1f}' for v in fr.imaginary)} cm⁻¹) "
+            "— expected a minimum; re-optimise (tighter Opt, or displace along the mode)")
+        return 1
     if nimag == 1:
         nu = fr.imaginary[0]
         ok(f"NImag = 1  (ν = {nu:.1f} cm⁻¹)")
@@ -635,7 +652,9 @@ def cmd_endpoints(a):
     if is_orca(text):
         # ORCA IRC writes <base>_IRC_F.xyz / <base>_IRC_B.xyz next to the output
         chg, mult = orca_charge_mult(text)
-        route = orca_strip_ts(CFG["orca_route"]) + " Opt Freq"
+        # keep the project's freq method: NumFreq stays NumFreq (analytic may be unavailable)
+        freq_kw = "NumFreq" if re.search(r"(?i)\bNumFreq\b", CFG["orca_route"]) else "Freq"
+        route = orca_strip_ts(CFG["orca_route"]) + f" Opt {freq_kw}"
         made = 0
         for tag, suffix in (("fwd", "_IRC_F.xyz"), ("rev", "_IRC_B.xyz")):
             xyz = log.with_name(log.stem + suffix)
@@ -663,46 +682,32 @@ def cmd_endpoints(a):
                              mult if mult is not None else CFG["mult"], geom,
                              title=f"IRC {tag} endpoint opt from {log.name}")
         ok(f"endpoint opt ({tag}) → {inp}")
-    info("optimise both, then `driver.py verify` each: expect NImag=0 and geometries "
-        "matching the intended reactant/product")
+    info("optimise both, then `driver.py verify <log> --expect-minimum` each, and check "
+         "the geometries match the intended reactant/product")
     return 0
 
 def _gau_irc_endpoints(text: str):
-    """Last geometry seen in each IRC direction. Follows the FORWARD/REVERSE
-    markers Gaussian prints while walking the path; with `Both`, the final
-    geometry of each direction is that side's endpoint."""
-    direction, last = None, {"FORWARD": None, "REVERSE": None}
+    """Last geometry of each IRC leg. In an IRC=Both run Gaussian walks the
+    FORWARD leg, prints a boundary marker ('Calculation of FORWARD path
+    complete.' / 'Beginning calculation of the REVERSE path.' — wording varies
+    by version), then walks the REVERSE leg. Splitting the log at the first
+    such marker is robust regardless of whether the marker leads or trails its
+    leg: the last geometry before it is the forward endpoint, the last after
+    it is the reverse endpoint."""
     lines = text.splitlines()
-    i = 0
-    while i < len(lines):
-        up = lines[i].upper()
-        if "FORWARD" in up and "PATH" in up:
-            direction = "FORWARD"
-        elif "REVERSE" in up and "PATH" in up:
-            direction = "REVERSE"
-        elif ("Input orientation:" in lines[i] or "Standard orientation:" in lines[i]):
-            block = "\n".join(lines[i:i + 8000])
-            geom = gau_last_first_geometry(block)
-            if geom and direction:
-                last[direction] = geom
-        i += 1
-    return last["FORWARD"], last["REVERSE"]
-
-def gau_last_first_geometry(block: str):
-    """First orientation block within `block` (helper for IRC walking)."""
-    atoms = []
-    for ln in block.splitlines()[1:]:
-        if re.match(r"^\s*-{5,}\s*$", ln):
-            if atoms:
-                break
-            continue
-        t = ln.split()
-        if len(t) >= 6 and t[0].isdigit() and t[1].lstrip("-").isdigit():
-            atoms.append(Atom(Z_SYM.get(int(t[1]), t[1]),
-                              float(t[-3]), float(t[-2]), float(t[-1])))
-        elif atoms:
+    split = None
+    for i, ln in enumerate(lines):
+        up = ln.upper()
+        if "PATH" in up and ("REVERSE" in up or ("FORWARD" in up and "COMPLETE" in up)):
+            split = i
             break
-    return atoms or None
+    if split is None:
+        return None, None
+    geoms = [(i, _parse_orientation_at(lines, i)) for i, ln in enumerate(lines)
+             if "Input orientation:" in ln or "Standard orientation:" in ln]
+    fwd = [g for i, g in geoms if g and i < split]
+    rev = [g for i, g in geoms if g and i > split]
+    return (fwd[-1] if fwd else None), (rev[-1] if rev else None)
 
 # =============================================================================
 # status : one-line summary per output file (termination, NImag, energies).
@@ -1048,6 +1053,27 @@ def cmd_selftest(a):
               len(fg.imaginary) == 1 and len(fo.imaginary) == 1 and
               fg.mode is not None and fo.mode is not None)
 
+        # IRC endpoint extraction — both leg-boundary marker dialects
+        def irc_log(marker):
+            def blk(z1):
+                return ("                         Input orientation:\n"
+                        " ---------------------------------------------------------------------\n"
+                        " Center     Atomic      Atomic             Coordinates (Angstroms)\n"
+                        " Number     Number       Type             X           Y           Z\n"
+                        " ---------------------------------------------------------------------\n"
+                        f"      1          6           0        0.000000    0.000000    {z1:.6f}\n"
+                        "      2          1           0        0.000000    0.000000    1.100000\n"
+                        " ---------------------------------------------------------------------\n")
+            return (" Charge =  0 Multiplicity = 1\n" + blk(0.00) + blk(0.10)
+                    + marker + "\n" + blk(-0.10)
+                    + " Normal termination of Gaussian 16.\n")
+        for name, marker in (("trailing 'complete' marker", " Calculation of FORWARD path complete."),
+                             ("leading 'reverse' marker", " Point Number  1 in REVERSE path direction.")):
+            fwd, rev = _gau_irc_endpoints(irc_log(marker))
+            check(f"g16 IRC endpoints via {name}",
+                  fwd is not None and rev is not None and
+                  abs(fwd[0].z - 0.10) < 1e-6 and abs(rev[0].z + 0.10) < 1e-6)
+
     # route surgery
     r = strip_opt_freq(DEFAULTS["gaussian_route"])
     check("gaussian route strip removes Opt/Freq",
@@ -1104,6 +1130,8 @@ def main():
 
     v = sub.add_parser("verify", help="NImag + imaginary-mode check on a Gaussian/ORCA freq output")
     v.add_argument("log"); v.add_argument("--reactant", default=None); v.add_argument("--product", default=None)
+    v.add_argument("--expect-minimum", action="store_true",
+                   help="PASS on NImag=0 (for verifying IRC endpoint opts, not the TS)")
     v.set_defaults(fn=cmd_verify)
 
     i = sub.add_parser("irc", help="generate an IRC input from a TS output")

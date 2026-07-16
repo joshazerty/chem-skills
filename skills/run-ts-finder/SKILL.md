@@ -108,8 +108,13 @@ python3 $D endpoints ts_irc.log  # → *_irc_fwd.inp / *_irc_rev.inp endpoint Op
                                  #   (ORCA: picks up the <base>_IRC_F.xyz/_IRC_B.xyz files)
 ```
 
-Optimise both endpoints and confirm `NImag=0` (`verify` again) and that each
-matches the intended reactant/product (use `status`).
+Optimise both endpoints, then confirm each is a true minimum and matches the
+intended reactant/product:
+
+```bash
+python3 $D verify fwd_endpoint.log --expect-minimum   # PASS NImag = 0 — confirmed minimum
+python3 $D status .                                   # compare endpoint energies/geometries
+```
 
 **5 — Progress / energetics:**
 
