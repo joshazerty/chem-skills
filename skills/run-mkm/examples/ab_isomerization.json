@@ -1,0 +1,17 @@
+{
+  "name": "ab_isomerization",
+  "T": 298.15,
+  "energy_unit": "kcal/mol",
+  "standard_state": 1.0,
+  "_comment": "Minimal A <-> I <-> B isomerization used for the fast self-test. A held at 1 M, B drained to 0.001 M; net flux runs A -> B through intermediate I.",
+  "species": [
+    {"name": "A", "G": 0.0,   "conc0": 1.0,   "fixed": true},
+    {"name": "I", "G": 2.0,   "conc0": 0.0},
+    {"name": "B", "G": -3.0,  "conc0": 0.001, "fixed": true}
+  ],
+  "reactions": [
+    {"id": "s1", "reactants": {"A": 1}, "products": {"I": 1}, "G_ts": 18.0},
+    {"id": "s2", "reactants": {"I": 1}, "products": {"B": 1}, "G_ts": 20.0, "nu_imag": 900.0}
+  ],
+  "objective": {"type": "species", "name": "B"}
+}

@@ -9,6 +9,7 @@ Each skill is a self-contained directory under [`skills/`](skills/) with a
 | Skill | What it does |
 |---|---|
 | [`run-ts-finder`](skills/run-ts-finder/) | Locate **and rigorously verify** a transition state from two endpoints: g-xTB + GSM (growing string) → Gaussian **or** ORCA refinement at the project level of theory → verification cascade (NImag=1, imaginary mode ↔ reaction-vector overlap, IRC, endpoint opts). Self-improving: records workarounds it discovers. |
+| [`run-mkm`](skills/run-mkm/) | **Differentiable micro-kinetic analysis** of a computed reaction network. DFT free energies → rate constants → steady-state TOF, **degree of rate control** (Campbell X\_RC), reaction orders, apparent Ea, **energetic span** (Kozuch–Shaik) cross-check, **kinetic isotope effect** (intrinsic → network-apparent), and DFT-uncertainty propagation. JAX + SciPy: steady state by BDF+Newton, exact autodiff sensitivities via the implicit function theorem. Pure Python — no cluster needed. |
 
 ## Install
 
@@ -26,7 +27,9 @@ Re-run it after pulling new skills.
 
 ## Environment notes
 
-These skills are tuned for **joshua's cluster** (Gaussian via `subgau16`, ORCA via
+`run-mkm` is pure-Python and machine-independent (`pip install numpy scipy jax
+jaxlib matplotlib`, then `driver.py selftest`). The QM-driver skills below are
+tuned for **joshua's cluster** (Gaussian via `subgau16`, ORCA via
 `/home/janko/Scripts/suborc6`, g-xTB at `/home/joshua/bins/gxtb/...`, GSM infra at
 `/home/joshua/dodh/ts/_gsm_infra`, Torque queue `m0311`). On a different machine,
 override the paths the drivers expose — `run-ts-finder/driver.py` reads `GXTB` and
