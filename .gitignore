@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+
+# per-site configuration (copy from config.example.json; never committed)
+skills/*/config.json
