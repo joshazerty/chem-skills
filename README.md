@@ -9,6 +9,7 @@ Each skill is a self-contained directory under [`skills/`](skills/) with a
 | Skill | What it does |
 |---|---|
 | [`run-ts-finder`](skills/run-ts-finder/) | Locate **and rigorously verify** a transition state from two endpoints: g-xTB + GSM (growing string) → Gaussian **or** ORCA refinement at the project level of theory → verification cascade (NImag=1, imaginary mode ↔ reaction-vector overlap, IRC, endpoint opts). Self-improving: records workarounds it discovers. |
+| [`run-mkm`](skills/run-mkm/) | **Differentiable micro-kinetic analysis** of a computed reaction network. DFT free energies → rate constants → steady-state TOF, **degree of rate control** (Campbell X\_RC), reaction orders, apparent Ea, **energetic span** (Kozuch–Shaik) cross-check, **kinetic isotope effect** (intrinsic → network-apparent), and DFT-uncertainty propagation. JAX + SciPy: steady state by BDF+Newton, exact autodiff sensitivities via the implicit function theorem. Pure Python — no cluster needed. |
 
 ## Install
 
@@ -26,9 +27,11 @@ Re-run it after pulling new skills.
 
 ## Per-site configuration
 
-The skills are machine-agnostic: drivers are stdlib-only Python and read all
-site specifics (binary locations, queue-submit commands, level of theory) from
-a `config.json` next to the driver. To set up a new machine:
+The skills are machine-agnostic. `run-mkm` needs no configuration at all — it is
+pure Python (`pip install numpy scipy jax jaxlib matplotlib`, then
+`driver.py selftest`). The QM-driver skills read all site specifics (binary
+locations, queue-submit commands, level of theory) from a `config.json` next to
+the driver. To set up a new machine:
 
 ```bash
 cd skills/run-ts-finder

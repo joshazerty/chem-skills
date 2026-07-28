@@ -1,0 +1,28 @@
+{
+  "name": "model_catalytic_cycle",
+  "T": 298.15,
+  "energy_unit": "kcal/mol",
+  "standard_state": 1.0,
+  "_comment": "Idealised A + B -> P catalytic cycle. Free energies (kcal/mol) are relative to (cat + A + B) at 1 M. Step r3 (C-H bond formation) is the TOF-determining TS and carries the KIE. Reservoirs A, B, P held constant; catalyst 'cat' is conserved (total = 1e-3 M).",
+  "species": [
+    {"name": "cat",    "G": 0.0,   "conc0": 1.0e-3, "catalyst": true, "role": "resting state"},
+    {"name": "A",      "G": 0.0,   "conc0": 1.0,   "fixed": true, "role": "substrate"},
+    {"name": "B",      "G": 0.0,   "conc0": 1.0,   "fixed": true, "role": "substrate (H donor)"},
+    {"name": "P",      "G": -22.0, "conc0": 0.01,  "fixed": true, "role": "product"},
+    {"name": "cat_A",  "G": -4.0,  "conc0": 0.0,   "catalyst": true, "role": "A-bound"},
+    {"name": "cat_AB", "G": -7.0,  "conc0": 0.0,   "catalyst": true, "role": "A,B-bound"},
+    {"name": "cat_P",  "G": -19.0, "conc0": 0.0,   "catalyst": true, "role": "product-bound"}
+  ],
+  "reactions": [
+    {"id": "r1", "reactants": {"cat": 1, "A": 1},   "products": {"cat_A": 1},        "G_ts": 6.0,
+      "_note": "A binding"},
+    {"id": "r2", "reactants": {"cat_A": 1, "B": 1},  "products": {"cat_AB": 1},       "G_ts": 4.0,
+      "_note": "B binding"},
+    {"id": "r3", "reactants": {"cat_AB": 1},         "products": {"cat_P": 1},        "G_ts": 16.5,
+      "nu_imag": 1350.0,
+      "_note": "C-H bond formation: TOF-determining TS, primary KIE lives here"},
+    {"id": "r4", "reactants": {"cat_P": 1},          "products": {"cat": 1, "P": 1},  "G_ts": -12.0,
+      "_note": "product release (low barrier vs cat_P)"}
+  ],
+  "objective": {"type": "species", "name": "P"}
+}
