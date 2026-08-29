@@ -1,0 +1,68 @@
+{
+  "dxt_version": "0.1",
+  "name": "chemdraw",
+  "display_name": "ChemDraw",
+  "version": "1.0.0",
+  "description": "Draw, read and export chemical structures with ChemDraw, in ACS house style.",
+  "long_description": "Drives ChemDraw on macOS through its AppleScript dictionary. Draw a molecule from SMILES (RDKit generates 2D coordinates and writes native CDXML), read the formula, molecular weight, exact mass and elemental analysis of an open structure, run Clean Up Structure, and export to PDF, EPS, TIFF, PNG, Molfile, CML and more. Every structure is drawn in ACS Document 1996 style.",
+  "author": {
+    "name": "Joshua Sims",
+    "url": "https://github.com/joshazerty/chem-skills"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server/chemdraw_server.py",
+    "mcp_config": {
+      "command": "/opt/homebrew/bin/uv",
+      "args": [
+        "run",
+        "--quiet",
+        "${__dirname}/server/chemdraw_server.py"
+      ],
+      "env": {}
+    }
+  },
+  "tools": [
+    {
+      "name": "draw",
+      "description": "SMILES -> drawn, cleaned structure with properties and an image"
+    },
+    {
+      "name": "read_front_document",
+      "description": "Chemistry of the structure open in ChemDraw"
+    },
+    {
+      "name": "open_file",
+      "description": "Open a .cdx/.cdxml/.mol/.rxn/.cml file and report it"
+    },
+    {
+      "name": "export",
+      "description": "Export the front document to another format"
+    },
+    {
+      "name": "convert",
+      "description": "Convert a chemistry file between formats"
+    },
+    {
+      "name": "clean_structure",
+      "description": "Run ChemDraw's Clean Up Structure"
+    },
+    {
+      "name": "run_command",
+      "description": "Run any ChemDraw menu command by name"
+    },
+    {
+      "name": "list_commands",
+      "description": "Discover ChemDraw command names"
+    },
+    {
+      "name": "close_all",
+      "description": "Close all ChemDraw documents without saving"
+    }
+  ],
+  "compatibility": {
+    "platforms": [
+      "darwin"
+    ]
+  }
+}
