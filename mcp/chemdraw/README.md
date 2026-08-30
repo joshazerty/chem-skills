@@ -30,6 +30,7 @@ AppleScript dictionary, so no Accessibility grant is needed.
 | `export` | Front document → any supported format |
 | `convert` | File → file, using ChemDraw's own converters |
 | `clean_structure` | ChemDraw's Clean Up Structure |
+| `apply_acs_style` | Force ACS Document 1996 house style on the front document |
 | `run_command` | Escape hatch to any of ChemDraw's ~1477 menu commands |
 | `list_commands` | Discover command names |
 | `close_all` | Close documents without saving |
@@ -39,6 +40,12 @@ Export formats: `cdxml` `cdx` `pdf` `png` `tiff` `jpeg` `gif` `bmp` `eps` `mol`
 the selection property instead.
 
 Outputs default to `~/Documents/Claude/Inbox` (override with `CHEMDRAW_OUT_DIR`).
+A `name` argument becomes a filename inside that directory, so it is restricted
+to letters, digits, space, `.`, `_` and `-` — it cannot carry a path.
+
+Every value that reaches AppleScript is escaped, and `run_command` additionally
+validates the command name: an unescaped quote in a name or path would close the
+string literal and run the remainder as AppleScript, `do shell script` included.
 
 ## Install
 
@@ -46,18 +53,27 @@ Outputs default to `~/Documents/Claude/Inbox` (override with `CHEMDRAW_OUT_DIR`)
 
 ```bash
 claude mcp add --scope user chemdraw -- \
-  /opt/homebrew/bin/uv run --quiet "$PWD/chemdraw_server.py"
+  "$(command -v uv)" run --quiet "$PWD/chemdraw_server.py"
 claude mcp list        # chemdraw: … ✔ Connected
 ```
 
-**Claude Desktop** — this version does *not* read `claude_desktop_config.json`
-for MCP servers; local servers are installed as **extensions**. Build a bundle
-and install it through the UI (installations are integrity-hashed, so hand-
-editing the config will not work):
+Use an absolute `uv` (as `command -v` gives): clients spawn MCP servers without
+your shell's `PATH`.
+
+**Claude Desktop** — install it as an **extension**. On the version tested
+(ChemDraw 25.0.2 era, 2026-08), edits to `claude_desktop_config.json` did not
+bring this server up, and `extensions-installations.json` is integrity-hashed,
+so hand-editing that file is discarded on next launch. Check your own version's
+behaviour before concluding the config route is unavailable to you. Build a
+bundle and install it through the UI:
 
 ```bash
 ./build.sh                     # → chemdraw.mcpb
 ```
+
+`build.sh` resolves `uv` on this machine and bakes that absolute path into the
+bundled manifest, so the bundle works on Apple silicon, Intel and a `~/.local`
+install alike. Override with `UV_BIN=/path/to/uv ./build.sh`.
 
 Then Claude Desktop → Settings → Extensions → Advanced settings → Install
 extension, or drag `chemdraw.mcpb` onto the window.

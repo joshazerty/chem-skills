@@ -1,0 +1,20 @@
+name: selftest
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Every skill's selftest is offline by contract -- no chemistry software,
+      # no ChemDraw licence -- so all of them run on a plain Linux runner.
+      - name: chemdraw-figures
+        run: python3 skills/chemdraw-figures/driver.py selftest
+      - name: shell scripts parse
+        run: bash -n install.sh mcp/chemdraw/build.sh
