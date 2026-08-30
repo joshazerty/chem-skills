@@ -43,9 +43,13 @@ whether Claude Code or Claude Desktop is asking.
   reconnects with no app restart. `claude_desktop_config.json` also carries an
   `mcpServers` record on that version, but it is only read at launch, so an edit
   there does nothing until Desktop is quit and reopened.
-- **Claude Science** cannot host this connector at all: it declares no
-  `com.apple.security.automation.apple-events` entitlement and sandboxes MCP
-  servers, so it cannot send Apple events to a desktop app.
+- **Claude Science** cannot host this connector. `codesign -d --entitlements`
+  on `Claude Science.app` (`com.anthropic.operon`) returns *no entitlements at
+  all* — `Claude.app` carries `com.apple.security.automation.apple-events`,
+  Science carries nothing — and it runs under the hardened runtime, so neither
+  it nor a server it spawns can send Apple events to ChemDraw. It does read
+  `mcpServers` from a project `.mcp.json`, so the server will start there; it
+  just cannot drive the app. The **skill** works there, minus rendering.
 
 Full detail in [`mcp/chemdraw/README.md`](mcp/chemdraw/README.md).
 

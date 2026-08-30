@@ -102,9 +102,16 @@ never both be set; `selftest` asserts exactly one is present.
 Then Claude Desktop → Settings → Extensions → Advanced settings → Install
 extension, or drag `chemdraw.mcpb` onto the window.
 
-**Claude Science** is not supported: it declares no
-`com.apple.security.automation.apple-events` entitlement and sandboxes MCP
-servers, so it cannot send Apple events to ChemDraw at all.
+**Claude Science** is not supported, and the reason is an entitlement rather
+than a configuration. `codesign -d --entitlements - "/Applications/Claude
+Science.app"` prints *nothing* — `com.anthropic.operon` declares no entitlements
+at all, where `Claude.app` declares `com.apple.security.automation.apple-events`
+— and it is signed with the hardened runtime, which is what makes the absence
+binding: Apple events are attributed to the responsible process, so a server
+Claude Science spawns cannot reach ChemDraw either. Claude Science *will* start
+the server (it reads `mcpServers` from a project `.mcp.json`); every call that
+touches ChemDraw then fails. The skill itself is fine there for authoring CDXML
+— only rendering needs the app.
 
 ## Prerequisites
 
