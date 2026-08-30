@@ -30,11 +30,15 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$")
 
 def _out(name: str) -> str:
+    # Two layers on purpose. The pattern says what a name may BE -- a plain
+    # filename, no separators -- and safe_output_path() checks where the name
+    # LANDS after resolution, which is the only thing that catches a symlink
+    # already sitting in OUT_DIR and pointing somewhere else.
     if not _SAFE_NAME.match(name or "") or ".." in name:
         raise ValueError(
             f"invalid name {name!r}: letters, digits, space, dot, underscore "
             f"and hyphen only, and no path separators")
-    return str(OUT_DIR / name)
+    return cb.safe_output_path(OUT_DIR, name)
 
 
 @mcp.tool()

@@ -26,6 +26,34 @@ run of >= 3 identical points — which the old geometry fails at exactly the two
 shaft junctions. Corollary for any new outline: a repeated point pins the
 curve only on the side that repeats it.
 
+### 2026-08-30 — The curved-arrow corner needs pinning from BOTH sides
+Repeating a point to force a corner is only half the rule. The shaft-to-barb
+step is *radial* — same angle, from `shaft/2` out to `head_w/2` — and the barb
+was tripled while the last shaft sample was left single. ChemDraw's smoothing
+then had one free point between a long tangential run and a 4 pt jump, so the
+outline overshot on its way into the barb: the shaft swelled and hooked just
+before the head, worst on the concave side where a 1.1 pt line suddenly reads
+as a lump, and the inner barb rounded off instead of coming to a point.
+**Fix:** triple the shaft-end sample on both edges as well, so the corner is
+pinned from both directions. `selftest` now checks the general invariant —
+wherever the outline steps in radius, both points either side of the step sit
+in a run of >= 3 identical points — which covers the barbs, the tip and both
+junctions at once.
+
+### 2026-08-30 — Command names: measure the charset, do not reason about it
+"ChemDraw commands are camelCase identifiers" is a very plausible sentence and
+it is wrong. Reading all **1474** command names out of ChemDraw 25.0.2, the
+non-alphanumerics that actually occur are space `(` `)` `,` `-` `.` `/` `_`:
+`2DTo3D` opens with a digit, the 568 `setFontFace_<Font Name>` commands carry
+spaces, `toggle_template_editor_Clipware, part 1` carries a comma, and the
+`availableSamples` / `availableStationery` / `availableDocumentsFor*` families
+embed a full POSIX path. A `^[A-Za-z][A-Za-z0-9_]{0,63}$` rule refuses **593 of
+the 1474** — 40 % of the command surface, silently, as "not a ChemDraw command
+name". The validation is defence in depth behind `_as()`, which escapes the
+name anyway; what it is there to exclude is quotes, backslashes and control
+characters, and no real name contains one. **Fix:** the charset is the measured
+set, and `selftest` pins it with real names read off the app.
+
 ### 2026-08-30 — AppleScript goes exponential at 10000, in the local decimal
 Probing the separators fixed `1,234`, but it never showed the other half of the
 locale problem, because the probe number is 1234.5. AppleScript renders a real

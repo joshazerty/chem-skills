@@ -14,7 +14,7 @@ Everything is checked by one script:
 
 ```bash
 python3 driver.py doctor      # prerequisites: ChemDraw, uv, RDKit, Automation, connector
-python3 driver.py selftest    # 21 offline tests; needs no ChemDraw
+python3 driver.py selftest    # 23 offline tests; needs no ChemDraw
 python3 driver.py build [dir] # render the worked example
 ```
 
@@ -109,7 +109,7 @@ invisible caption, subscripted nonsense. The three that bite first:
 - a caption left at the default face is in *formula* mode, not plain text
 - `color="1"` is **white**, not black — the attribute is offset by 2
 
-`driver.py selftest` asserts all three — and eighteen more, including that
+`driver.py selftest` asserts all three — and twenty more, including that
 `fit()` moves straight arrows, that atom labels are XML-escaped, and that the
 worked cycle balances — so a regression is caught offline.
 

@@ -91,7 +91,7 @@ permission** for whichever app hosts Claude. Its `doctor` checks all of that:
 ```bash
 cd skills/chemdraw-figures
 python3 driver.py doctor      # ChemDraw, uv, RDKit, Apple events, connector
-python3 driver.py selftest    # 21 CDXML tests — needs no ChemDraw at all
+python3 driver.py selftest    # 23 CDXML tests — needs no ChemDraw at all
 ```
 
 A missing Automation grant surfaces as AppleEvent error `-1743`, which looks

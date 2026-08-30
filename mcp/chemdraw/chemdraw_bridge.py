@@ -126,6 +126,22 @@ def parse_num(s: str, dec: str = None, thou: str = None) -> float:
     return float(sign + s)
 
 
+def safe_output_path(out_dir, name: str) -> str:
+    """Resolve an output name inside out_dir, refusing anything that escapes it.
+
+    `name` arrives from a tool argument, so it is untrusted. Two traps: pathlib
+    discards the base entirely when the right-hand side is absolute
+    (Path(base) / "/etc/x" == "/etc/x"), and "../" walks out of the directory.
+    """
+    import pathlib
+    root = pathlib.Path(out_dir).resolve()
+    candidate = (root / name).resolve()
+    if not str(candidate).startswith(str(root) + os.sep):
+        raise ChemDrawError(
+            f"output name {name!r} escapes {root}; pass a plain filename")
+    return str(candidate)
+
+
 def open_doc(path: str) -> None:
     """Rule 2: activate first, then open."""
     tell(f'activate\ndelay 0.5\nopen POSIX file {_as(os.path.abspath(path))}')
@@ -148,7 +164,7 @@ def select_all(strict: bool = False) -> bool:
     try:
         tell("activate")
         wait_ready()
-        tell('do command "selectAll"')
+        do_command("selectAll")
         return True
     except ChemDrawError:
         if strict:
@@ -156,9 +172,15 @@ def select_all(strict: bool = False) -> bool:
         return False
 
 
-# ChemDraw's own command names; the charset is deliberately narrow so a name
-# can never carry AppleScript syntax even before _as() escapes it.
-_COMMAND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$")
+# The charset is MEASURED, not guessed: over ChemDraw 25.0.2's own 1474 command
+# names the only non-alphanumerics that occur are space ( ) , - . / and _ --
+# `2DTo3D` opens with a digit, the 568 `setFontFace_<Font Name>` commands carry
+# spaces, and the `available*` families embed a full POSIX path. A camelCase-
+# identifier rule looks safer and rejects 593 of the 1474. None of these
+# characters can carry AppleScript syntax, and _as() escapes the name anyway;
+# what this rule exists to exclude is quotes, backslashes and control
+# characters, which no real command name contains.
+_COMMAND_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 (),./_-]{0,255}$")
 
 def do_command(name: str) -> None:
     if not _COMMAND_RE.match(name or ""):

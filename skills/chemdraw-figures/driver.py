@@ -353,6 +353,47 @@ def selftest():
             "quotes and backslashes escaped, command names validated, "
             "control characters refused")
 
+    # 15b. the command-name rule has to admit the commands ChemDraw actually
+    #      has. Measured over all 1474 names in ChemDraw 25.0.2, the only
+    #      non-alphanumerics that occur are space ( ) , - . / and _ — a
+    #      camelCase-identifier rule rejects 593 of them, `2DTo3D` and the 568
+    #      setFontFace_<Font Name> commands included. These samples are real
+    #      names read off the app.
+    real = ["selectAll", "cleanUpStructure", "2DTo3D",
+            "chooseArrowTool_90_CW",
+            "setFontFace_American Typewriter Condensed Bold",
+            "toggle_template_editor_Clipware, part 1",
+            "availableStationery /Applications/ChemDraw 25.0.2.app/Contents/"
+            "Resources/SpecialPurpose/Stationery/J. Mol. Mod. (1 Column).cds"]
+    refused = ["", "a" + chr(34) + "b", "a" + chr(92) + "b",
+               "a" + chr(10) + "b", "-leading", " leading"]
+    miss = [n for n in real if not cb._COMMAND_RE.match(n)]
+    lets = [n for n in refused if cb._COMMAND_RE.match(n)]
+    _report(not miss and not lets, "command names: real ones accepted",
+            f"{len(real)} measured names pass, quotes/backslashes/newlines "
+            f"refused" if not (miss or lets) else
+            f"rejected real {miss}; accepted bad {lets}")
+
+    # 15c. names also have to LAND inside the output directory. The pattern
+    #      above says what a name may be; this says where it ends up, which is
+    #      the only check that catches a symlink already in the output dir.
+    with tempfile.TemporaryDirectory() as td:
+        outside = os.path.join(td, "outside.txt")
+        open(outside, "w").close()
+        root = os.path.join(td, "out")
+        os.makedirs(root)
+        os.symlink(outside, os.path.join(root, "innocent.txt"))
+        ok = cb.safe_output_path(root, "fine.png") == os.path.join(
+            os.path.realpath(root), "fine.png")
+        escapes = all(
+            _raises(cb.ChemDrawError, cb.safe_output_path, root, n)
+            for n in ("/etc/passwd_clone", "../../escaped", "../x",
+                      "innocent.txt"))
+        _report(ok and escapes, "output paths stay in the output directory",
+                "absolute, ../ and a symlink out are all refused"
+                if ok and escapes else
+                f"plain name ok={ok}, escapes refused={escapes}")
+
     # 16. and the worked example still builds — seven fragments, and a cycle
     #     whose every step balances
     ex = os.path.join(HERE, "examples", "catalytic_cycle.py")
