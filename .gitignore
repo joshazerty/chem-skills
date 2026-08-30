@@ -5,3 +5,6 @@ __pycache__/
 
 # per-site configuration (copy from config.example.json; never committed)
 skills/*/config.json
+
+# built extension bundle (run mcp/chemdraw/build.sh)
+mcp/chemdraw/*.mcpb
