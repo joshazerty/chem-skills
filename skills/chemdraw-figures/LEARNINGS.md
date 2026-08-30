@@ -10,6 +10,40 @@ shipped template files. None of it is documented, and every one of these fails
 *silently* — a blank page, an invisible caption, a mangled label. Each has a
 matching assertion in `driver.py selftest`.
 
+### 2026-08-30 — AppleScript goes exponential at 10000, in the local decimal
+Probing the separators fixed `1,234`, but it never showed the other half of the
+locale problem, because the probe number is 1234.5. AppleScript renders a real
+with magnitude **>= 10000** in scientific notation, and the mantissa still
+carries the *locale* decimal separator: on this en_BE Mac a 14 kDa molecular
+weight comes back as `1,4029016E+4`, and `1234.5` itself as `1234,5` with no
+grouping separator at all (so `probe_separators()` legitimately returns
+`(",", "")` — an empty grouping separator is a real answer, not a failed
+probe). `parse_num` survives this only because it rewrites the *separators*
+and leaves everything else alone: the obvious tightening — "strip every
+character that is not a digit or the decimal separator" — silently reads
+`1,4029016E+4` as 1.40290164, out by 10^4. **Fix:** none needed, but
+`selftest` now pins the behaviour so the tightening cannot land later.
+Measured end-to-end: `read_props()` on a C1000H2002 document returns
+14029.016, matching RDKit to the milli-dalton.
+
+### 2026-08-30 — Resolve uv's directory, never its last symlink
+`doctor` reported uv via `os.path.realpath(shutil.which("uv"))`, which on
+Homebrew resolves the stable `/opt/homebrew/bin/uv` to the version-pinned
+`/opt/homebrew/Cellar/uv/0.11.24/bin/uv` — a path the next `brew upgrade uv`
+deletes. `build.sh` resolves only the *directory* and so bakes the stable path,
+which meant `doctor` and `build.sh` disagreed about uv on the same machine
+while the comment above `doctor`'s check claimed it reported "the one build.sh
+will bake in". Invisible on Linux, where uv is usually a real file in
+`~/.local/bin` with no symlink to follow. **Fix:** `_find_uv()` realpaths the
+dirname and keeps the basename, matching `build.sh`; `selftest` builds a
+symlinked uv on `PATH` and asserts the link is not followed. Related: the
+`manifest uv path` cross-check read the *committed* manifest, which holds a
+bare `uv` on purpose, so it never fired. `doctor` now reads the commands the
+clients will really spawn — the `~/.claude.json` entry and each installed
+Desktop extension manifest — and additionally warns when the registered
+`chemdraw_server.py` is not byte-identical to this repo's, which is how a
+client ends up quietly running a months-old copy of the connector.
+
 ### 2026-08-30 — `.mcpb` manifest: one version key, never both
 `manifest_version` and `dxt_version` look like a new name and an old one worth
 setting together for compatibility. They are not: in every schema shipped by

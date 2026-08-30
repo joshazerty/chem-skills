@@ -33,17 +33,69 @@ def _report(ok, label, detail="", warn=False):
 
 # ----------------------------------------------------------------- doctor --
 def _find_uv():
-    """Absolute path to uv: PATH first, then the usual install prefixes."""
+    """Absolute path to uv: PATH first, then the usual install prefixes.
+
+    Resolves the *directory* to a real path but keeps the final component as
+    named, exactly as build.sh does. Following the last symlink would turn
+    Homebrew's stable /opt/homebrew/bin/uv into the version-pinned
+    /opt/homebrew/Cellar/uv/<ver>/bin/uv, which `brew upgrade uv` deletes --
+    a path this function must never hand to a manifest.
+    """
     import shutil
     found = shutil.which("uv")
     if found:
-        return os.path.realpath(found)
+        return os.path.join(os.path.realpath(os.path.dirname(found)),
+                            os.path.basename(found))
     for cand in ("/opt/homebrew/bin/uv", "/usr/local/bin/uv",
                  os.path.expanduser("~/.local/bin/uv"),
                  os.path.expanduser("~/.cargo/bin/uv")):
         if os.path.exists(cand):
             return cand
     return None
+
+
+def _same_file(a, b):
+    """True when both paths exist and hold identical bytes."""
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            return fa.read() == fb.read()
+    except OSError:
+        return False
+
+
+def _installed_server_commands():
+    """(where, command) for every place this connector is already registered.
+
+    doctor's job is to catch a registration the client cannot launch, so read
+    the commands the clients will actually spawn -- the Claude Code entry and
+    each installed Desktop extension manifest -- not the committed manifest,
+    which holds a bare "uv" on purpose.
+    """
+    import json
+    out = []
+    cc = os.path.expanduser("~/.claude.json")
+    if os.path.exists(cc):
+        try:
+            srv = (json.load(open(cc, encoding="utf-8")).get("mcpServers")
+                   or {}).get("chemdraw")
+            if srv and srv.get("command"):
+                out.append(("Claude Code", srv["command"], srv.get("args", [])))
+        except (ValueError, OSError):
+            pass
+    import glob
+    for man in glob.glob(os.path.expanduser(
+            "~/Library/Application Support/Claude/Claude Extensions/"
+            "*chemdraw*/manifest.json")):
+        try:
+            cfg = (json.load(open(man, encoding="utf-8"))["server"]
+                   ["mcp_config"])
+        except (ValueError, OSError, KeyError):
+            continue
+        # ${__dirname} is the extension's own install directory.
+        here = os.path.dirname(man)
+        args = [a.replace("${__dirname}", here) for a in cfg.get("args", [])]
+        out.append(("Claude Desktop", cfg.get("command"), args))
+    return out
 
 
 def _chemdraw_app():
@@ -58,27 +110,11 @@ def doctor():
     app = _chemdraw_app()
     _report(bool(app), "ChemDraw installed", app or "no /Applications/ChemDraw*.app")
 
-    # Clients spawn MCP servers without your shell's PATH, so the manifest has
-    # to name an absolute uv. Report the one build.sh will bake in, and check
-    # it against any already-installed manifest rather than guessing a prefix.
+    # Clients spawn MCP servers without your shell's PATH, so the registration
+    # has to name an absolute uv. Report the one build.sh will bake in.
     uv = _find_uv()
     _report(bool(uv), "uv available", uv or
             "needed to launch the MCP server (brew install uv)")
-    if uv:
-        manifest = os.path.join(HERE, "..", "..", "mcp", "chemdraw", "manifest.json")
-        if os.path.exists(manifest):
-            import json as _json
-            try:
-                cmd = (_json.load(open(manifest))["server"]["mcp_config"]
-                       ["command"])
-            except (ValueError, OSError, KeyError):
-                cmd = None
-            # The committed manifest holds a bare "uv" on purpose -- build.sh
-            # rewrites it per machine -- so only an absolute one is checkable.
-            if cmd and os.path.isabs(cmd) and cmd != uv:
-                _report(os.path.exists(cmd), "manifest uv path",
-                        f"manifest says {cmd}, this machine has {uv} — "
-                        f"re-run mcp/chemdraw/build.sh to retarget it")
 
     try:
         from rdkit import Chem
@@ -105,27 +141,32 @@ def doctor():
                 "(System Settings → Privacy & Security → Automation)")
 
     # connector registration — either surface is fine
-    import json
-    reg = []
-    cc = os.path.expanduser("~/.claude.json")
-    if os.path.exists(cc):
-        try:
-            if "chemdraw" in (json.load(open(cc)).get("mcpServers") or {}):
-                reg.append("Claude Code")
-        except (ValueError, OSError):
-            pass
-    ext = os.path.expanduser(
-        "~/Library/Application Support/Claude/extensions-installations.json")
-    if os.path.exists(ext):
-        try:
-            names = json.load(open(ext)).get("extensions", {})
-            if any("chemdraw" in k.lower() for k in names):
-                reg.append("Claude Desktop")
-        except (ValueError, OSError):
-            pass
-    _report(bool(reg), "MCP connector registered",
-            ", ".join(reg) if reg else
+    installed = _installed_server_commands()
+    _report(bool(installed), "MCP connector registered",
+            ", ".join(sorted({w for w, _, _ in installed})) if installed else
             "see mcp/chemdraw/README.md — rendering needs it", warn=True)
+
+    # A registration is only as good as the command the client will spawn, and
+    # both halves rot independently: the interpreter can move (uv upgraded,
+    # Homebrew prefix changed) and the server file can be a stale copy left
+    # somewhere outside this repo. Name both so neither rots unnoticed.
+    for where, cmd, args in installed:
+        if cmd and os.path.isabs(cmd):
+            _report(os.access(cmd, os.X_OK), f"{where} launches {cmd}",
+                    "as registered" if os.access(cmd, os.X_OK) else
+                    f"not executable — this machine has {uv}; re-run "
+                    f"mcp/chemdraw/build.sh (Desktop) or re-add the server")
+        served = next((a for a in args
+                       if a.endswith("chemdraw_server.py")), None)
+        if served:
+            served = os.path.expanduser(served)
+            mine = os.path.join(HERE, "..", "..", "mcp", "chemdraw",
+                                "chemdraw_server.py")
+            same = _same_file(served, mine)
+            _report(same, f"{where} runs this repo's server",
+                    served if same else
+                    f"{served} differs from mcp/chemdraw/chemdraw_server.py — "
+                    f"that client is running another copy", warn=True)
 
     print("\n" + ("doctor: FAIL" if _fails else "doctor: PASS"))
     return 1 if _fails else 0
@@ -323,6 +364,46 @@ def selftest():
             f"{len(actual)} tools, one version key ({', '.join(keys)})"
             if keys == ["manifest_version"] and declared == actual else
             f"version keys {keys}; declared {declared} vs actual {actual}")
+
+    # 19. AppleScript switches to scientific notation at |x| >= 10000, and
+    #     still uses the locale decimal separator inside the mantissa: on an
+    #     en_BE Mac a 14 kDa molecular weight arrives as "1,4029016E+4". The
+    #     exponent must survive parse_num's separator rewriting -- stripping
+    #     "every non-digit but the decimal point" would read it as 1.4e7.
+    sci = [(("1,4029016E+4", ",", ""), 14029.016),
+           (("1.4029016E+4", ".", ","), 14029.016),
+           (("1,401766571406E+4", ",", ""), 14017.66571406),
+           (("-2,5E-3", ",", ""), -0.0025)]
+    bad = [f"{t[0]}->{cb.parse_num(*t)} != {want}" for t, want in sci
+           if abs(cb.parse_num(*t) - want) > 1e-9]
+    _report(not bad, "locale scientific notation parsed",
+            "mantissa separator rewritten, exponent left alone"
+            if not bad else "; ".join(bad))
+
+    # 20. _find_uv() must name uv the way build.sh does -- resolving the
+    #     directory but NOT the final symlink. Following it turns Homebrew's
+    #     stable /opt/homebrew/bin/uv into /opt/homebrew/Cellar/uv/<ver>/bin/uv,
+    #     which the next `brew upgrade uv` deletes, and doctor would then be
+    #     reporting a path no manifest should ever be given.
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as td:
+        real, binp = os.path.join(td, "real"), os.path.join(td, "bin")
+        os.makedirs(real), os.makedirs(binp)
+        target = os.path.join(real, "uv")
+        open(target, "w").close()
+        os.chmod(target, 0o755)
+        link = os.path.join(binp, "uv")
+        os.symlink(target, link)
+        old_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = binp
+        try:
+            got = _find_uv()
+        finally:
+            os.environ["PATH"] = old_path
+        want = os.path.join(os.path.realpath(binp), "uv")
+        _report(got == want, "uv path keeps the stable symlink",
+                got if got == want else
+                f"{got} — followed the symlink; wanted {want}")
 
     print("\n" + ("selftest: FAIL" if _fails else "selftest: PASS"))
     return 1 if _fails else 0
