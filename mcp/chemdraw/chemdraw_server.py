@@ -25,7 +25,7 @@ OUT_DIR = pathlib.Path(os.environ.get(
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 def _out(name: str) -> str:
-    return str(OUT_DIR / name)
+    return cb.safe_output_path(OUT_DIR, name)
 
 
 @mcp.tool()
@@ -108,11 +108,12 @@ def run_command(command: str) -> str:
     """
     cb.select_all()
     try:
-        cb.tell(f'do command "{command}"')
+        cb.do_command(command)
         return f"ran {command}"
     except cb.ChemDrawError as e:
         try:
-            en = cb.tell(f'return (enabled of command "{command}") as text')
+            en = cb.tell('return (enabled of command '
+                         f'"{cb.esc(command)}") as text')
         except cb.ChemDrawError:
             return f"no such command {command!r}; use list_commands to find it"
         if en == "false":

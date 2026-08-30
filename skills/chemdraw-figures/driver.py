@@ -158,7 +158,45 @@ def selftest():
     _report(0 < w < 400 and 0 < h < 400, "fit() tightens the page",
             f"{w:.0f} x {h:.0f} pt")
 
-    # 10. the worked example still builds seven fragments
+    # --- connector trust boundary (the bridge imports without the mcp package) --
+    sys.path.insert(0, os.path.join(HERE, "..", "..", "mcp", "chemdraw"))
+    try:
+        import chemdraw_bridge as cb
+    except ImportError:
+        cb = None
+    if cb is None:
+        _report(False, "connector importable", "mcp/chemdraw not found", warn=True)
+    else:
+        # 10. every interpolation into AppleScript must be escaped, or a quote
+        #     in a path/command closes the literal and reaches do shell script
+        evil = '/tmp/a" & (do shell script "echo pwned") & "'
+        _report('"' not in cb.esc(evil).replace('\\"', ""),
+                "AppleScript escaping", "quotes neutralised in esc()")
+
+        # 11. do command takes a model-supplied name; only identifiers allowed
+        good = all(cb.COMMAND_RE.match(c) for c in
+                   ("selectAll", "cleanUpStructure", "chooseArrowTool_90_CW"))
+        bad = any(cb.COMMAND_RE.match(c) for c in
+                  ('x" & (do shell script "id") & "', "a; rm -rf /", "", "a b"))
+        _report(good and not bad, "command-name validation",
+                "identifiers accepted, injection refused")
+
+        # 12. output names are filenames, not paths
+        contained = True
+        try:
+            cb.safe_output_path("/tmp", "fine.png")
+        except Exception:
+            contained = False
+        for esc_name in ("/etc/passwd_clone", "../../escaped", "../.ssh/x"):
+            try:
+                cb.safe_output_path("/tmp", esc_name)
+                contained = False
+            except cb.ChemDrawError:
+                pass
+        _report(contained, "output path containment",
+                "absolute and ../ names refused")
+
+    # 13. the worked example still builds seven fragments
     ex = os.path.join(HERE, "examples", "catalytic_cycle.py")
     r = subprocess.run([sys.executable, ex, "/tmp/_chemdraw_selftest.cdxml"],
                        capture_output=True, text=True, timeout=120)

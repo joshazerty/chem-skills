@@ -24,6 +24,17 @@ BUNDLE = "com.revvity.ChemDraw"
 class ChemDrawError(RuntimeError):
     pass
 
+def esc(value) -> str:
+    """Escape a value for embedding in an AppleScript string literal.
+
+    Every interpolation into a `tell` block MUST go through this. Without it a
+    path or command name containing a double quote closes the literal early and
+    the remainder is executed as AppleScript -- which reaches `do shell script`,
+    i.e. arbitrary code execution. Verified, not theoretical.
+    """
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
 def osa(script: str, timeout: int = 90) -> str:
     p = subprocess.run(["osascript", "-e", script],
                        capture_output=True, text=True, timeout=timeout)
@@ -47,9 +58,25 @@ def parse_num(s: str) -> float:
         s = s.replace(",", ".")
     return float(s)
 
+def safe_output_path(out_dir, name: str) -> str:
+    """Resolve an output name inside out_dir, refusing anything that escapes it.
+
+    `name` arrives from a tool argument, so it is untrusted. Two traps: pathlib
+    discards the base entirely when the right-hand side is absolute
+    (Path(base) / "/etc/x" == "/etc/x"), and "../" walks out of the directory.
+    """
+    import pathlib
+    root = pathlib.Path(out_dir).resolve()
+    candidate = (root / name).resolve()
+    if not str(candidate).startswith(str(root) + os.sep):
+        raise ChemDrawError(
+            f"output name {name!r} escapes {root}; pass a plain filename")
+    return str(candidate)
+
+
 def open_doc(path: str) -> None:
     """Rule 2: activate first, then open."""
-    tell(f'activate\ndelay 0.5\nopen POSIX file "{os.path.abspath(path)}"')
+    tell(f'activate\ndelay 0.5\nopen POSIX file "{esc(os.path.abspath(path))}"')
 
 def wait_ready(tries: int = 40) -> bool:
     """Rule 2: poll the canvas readiness signal."""
@@ -69,7 +96,7 @@ def select_all(strict: bool = False) -> bool:
     try:
         tell("activate")
         wait_ready()
-        tell('do command "selectAll"')
+        do_command("selectAll")
         return True
     except ChemDrawError:
         if strict:
@@ -113,6 +140,19 @@ def read_props() -> dict:
         out[key] = parse_num(raw) if cast is float else raw
     return out
 
+# ChemDraw command names are camelCase identifiers (selectAll, cleanUpStructure,
+# chooseArrowTool_90_CW). Anything outside this charset cannot be a real command
+# and is the shape an injection attempt takes, so refuse it outright.
+COMMAND_RE = re.compile(r"\A[A-Za-z][A-Za-z0-9_]{0,63}\Z")
+
+
+def do_command(name: str) -> None:
+    if not COMMAND_RE.match(name or ""):
+        raise ChemDrawError(
+            f"refusing command name {name!r}: expected a camelCase identifier")
+    tell(f'do command "{name}"')
+
+
 SAVE_FORMATS = {
     "cdxml": "ChemDraw XML", "cdx": "ChemDraw", "pdf": "PDF", "png": "PNG",
     "tiff": "TIFF", "jpeg": "JPEG", "gif": "GIF", "bmp": "BMP",
@@ -126,7 +166,8 @@ def save_as(dest_noext: str, fmt: str) -> str:
     if fmt not in SAVE_FORMATS:
         raise ChemDrawError(f"unsupported format {fmt}; have {sorted(SAVE_FORMATS)}")
     dest_noext = os.path.abspath(dest_noext)
-    tell(f'save front document in POSIX file "{dest_noext}" as "{SAVE_FORMATS[fmt]}"')
+    tell(f'save front document in POSIX file "{esc(dest_noext)}" '
+         f'as "{esc(SAVE_FORMATS[fmt])}"')
     for cand in (f"{dest_noext}.{fmt}", dest_noext):
         if os.path.exists(cand):
             return cand
