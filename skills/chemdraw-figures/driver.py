@@ -227,6 +227,36 @@ def selftest():
     _report(any(xy[i] == xy[i + 1] == xy[i + 2] for i in range(len(xy) - 2)),
             "arrowhead corners", "points tripled to survive smoothing")
 
+    # 6b. EVERY corner, both sides. The shaft-to-barb step is radial, so a
+    #     lone sample at the shaft end lets the spline overshoot into the
+    #     tripled barb -- the shaft swells and hooks just before the head.
+    #     Invariant: wherever the outline steps in radius, both points either
+    #     side of the step sit in a run of >= 3 identical points.
+    import math as _m
+    ap = Page(300, 300)
+    ap.curved_arrow(150, 150, 90, 90, 20)
+    apts = _re.search(r'CurvePoints="([^"]+)"', ap.items[-1]).group(1).split()
+    axy = [(float(apts[i]), float(apts[i + 1]))
+           for i in range(0, len(apts), 2)]
+    runs = []                       # (index, length) of each repeated run
+    i = 0
+    while i < len(axy):
+        j = i
+        while j + 1 < len(axy) and axy[j + 1] == axy[i]:
+            j += 1
+        runs.append((i, j - i + 1))
+        i = j + 1
+    tripled = {k for start, n in runs if n >= 3 for k in range(start, start + n)}
+    rad = [_m.hypot(x - 150, y - 150) for x, y in axy]
+    loose = [i for i in range(len(axy) - 1)
+             if abs(rad[i + 1] - rad[i]) > 1.0
+             and not (i in tripled and i + 1 in tripled)]
+    _report(not loose, "arrow corners pinned on both sides",
+            f"{len(runs)} runs, every radial step tripled at both ends"
+            if not loose else
+            f"un-tripled radial step(s) at index {loose} — the shaft will "
+            f"overshoot into the barb")
+
     # 7. nothing may be written in an invisible colour
     _report(not _re.search(r'color="[12]"', xml),
             "no invisible text", 'color="1"/"2" both render white')

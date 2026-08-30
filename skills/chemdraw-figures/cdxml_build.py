@@ -223,13 +223,22 @@ class Page:
         # repeating its point -- the same trick ChemDraw's own Shapes template
         # uses (it triples the first point of every curve). Without this the
         # arrowhead barbs round off into a blob.
+        #
+        # BOTH ends of the shaft-to-barb step need it, not just the barb. The
+        # step is radial (shaft/2 out to head_w/2 at the same angle), so a lone
+        # sample at the shaft end leaves the spline free to overshoot on its
+        # way into the tripled barb: the shaft swells and hooks just before the
+        # head, worst on the concave side where it reads as a lump against a
+        # 1.1 pt line. Tripling the shaft end too pins the corner flat.
         C = lambda q: [q, q, q]
+        outer = sweep(r + shaft / 2, a1, a_base)         # outer edge of shaft
+        inner = sweep(r - shaft / 2, a_base, a1)         # inner edge, back
         pts  = C(pt(r + shaft / 2, a1))                  # square tail, outer
-        pts += sweep(r + shaft / 2, a1, a_base)          # outer edge of shaft
+        pts += outer[:-1] + C(outer[-1])                 # ... into its corner
         pts += C(pt(r + head_w / 2, a_base))             # barb
         pts += C(pt(r, a2))                              # tip
         pts += C(pt(r - head_w / 2, a_base))             # barb
-        pts += sweep(r - shaft / 2, a_base, a1)          # inner edge, back
+        pts += C(inner[0]) + inner[1:]                   # corner, then back
         pts += C(pt(r - shaft / 2, a1))                  # square tail, inner
         coords = " ".join(f"{x:.2f} {y:.2f}" for x, y in pts)
         self.items.append(

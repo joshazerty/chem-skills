@@ -10,6 +10,22 @@ shipped template files. None of it is documented, and every one of these fails
 *silently* — a blank page, an invisible caption, a mangled label. Each has a
 matching assertion in `driver.py selftest`.
 
+### 2026-08-30 — Pin a corner from *both* sides, or the shaft swells into it
+The 2026-08-29 rule "force a corner by repeating its point" was applied to the
+arrowhead barbs and the tip, but not to the shaft ends that meet them. The
+shaft-to-barb step is purely radial — same angle, `shaft/2` out to `head_w/2` —
+so with a single sample at the shaft end the spline is still free on that side
+and overshoots on its way into the tripled barb. Rendered, the shaft swells and
+hooks just before the head, and the barb behind it gets scooped into a curl;
+it shows worst on the concave side, where the lump sits against a 1.1 pt line
+and reads as "the arrow is fatter just before the point". **Fix:** triple the
+last outer-shaft sample and the first inner-shaft sample too, so both ends of
+every radial step are pinned. `selftest` walks the emitted `CurvePoints`,
+finds every step in radius, and asserts both points either side of it lie in a
+run of >= 3 identical points — which the old geometry fails at exactly the two
+shaft junctions. Corollary for any new outline: a repeated point pins the
+curve only on the side that repeats it.
+
 ### 2026-08-30 — AppleScript goes exponential at 10000, in the local decimal
 Probing the separators fixed `1,234`, but it never showed the other half of the
 locale problem, because the probe number is 1234.5. AppleScript renders a real
