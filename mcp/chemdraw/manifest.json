@@ -2,7 +2,7 @@
   "manifest_version": "0.2",
   "name": "chemdraw",
   "display_name": "ChemDraw",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Draw, read and export chemical structures with ChemDraw, in ACS house style.",
   "long_description": "Drives ChemDraw on macOS through its AppleScript dictionary. Draw a molecule from SMILES (RDKit generates 2D coordinates and writes native CDXML), read the formula, molecular weight, exact mass and elemental analysis of an open structure, run Clean Up Structure, and export to PDF, EPS, TIFF, PNG, Molfile, CML and more. Every structure is drawn in ACS Document 1996 style.",
   "author": {
