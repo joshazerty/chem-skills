@@ -10,6 +10,7 @@ that ChemDraw writes for that same document. Two unit systems are involved:
     point for font sizes)      -> ACS_APPLESCRIPT
   * CDXML root attributes use points                     -> ACS_CDXML
 """
+import math, re
 
 # --- AppleScript document properties (1440ths inch; font sizes 20ths pt) ---
 ACS_APPLESCRIPT = {
@@ -78,8 +79,65 @@ def cdxml_header(**overrides) -> str:
             f'<CDXML\n {a}\n>\n{FONT_TABLE}\n{COLOR_TABLE}\n')
 
 
-def apply_to_document(tell) -> None:
-    """Force ACS Document 1996 settings onto the front ChemDraw document."""
+def apply_to_document(tell, quote=None) -> None:
+    """Force ACS Document 1996 settings onto the front ChemDraw document.
+
+    `quote` renders a Python string as an AppleScript string literal; the
+    bridge passes its escaping one so a font name can never carry syntax.
+    """
+    quote = quote or (lambda v: '"%s"' % v)
     for key, val in ACS_APPLESCRIPT.items():
-        v = f'"{val}"' if isinstance(val, str) else val
+        v = quote(val) if isinstance(val, str) else val
         tell(f'set {key} of front document to {v}')
+
+
+# --------------------------------------------------------------- rescaling --
+_N_RE = re.compile(r'<n\b[^>]*\bid="(\d+)"[^>]*\bp="(-?[\d.]+) (-?[\d.]+)"')
+_B_RE = re.compile(r'<b\b[^>]*\bB="(\d+)"[^>]*\bE="(\d+)"')
+_P_RE = re.compile(r'p="(-?[\d.]+) (-?[\d.]+)"')
+
+
+def median_bond_length(body: str):
+    """Median drawn bond length of a CDXML body, in points. None if no bonds."""
+    pos = {m.group(1): (float(m.group(2)), float(m.group(3)))
+           for m in _N_RE.finditer(body)}
+    lens = [math.hypot(pos[b][0] - pos[e][0], pos[b][1] - pos[e][1])
+            for b, e in ((m.group(1), m.group(2)) for m in _B_RE.finditer(body))
+            if b in pos and e in pos]
+    if not lens:
+        return None
+    lens.sort()
+    return lens[len(lens) // 2]
+
+
+def rescale_to_bond_length(body: str, target: float = 14.4,
+                           margin: float = 18.0) -> str:
+    """Scale a CDXML body so its median bond length is `target` points.
+
+    RDKit draws at its own scale (measured: 28.8 pt, exactly 2x ACS) and emits
+    coordinates around the origin, so a body spliced under the ACS header is
+    the wrong size and half off the page. Measuring rather than assuming the
+    factor keeps this correct if RDKit's scale ever changes. Also gives the
+    page a BoundingBox, which RDKit omits.
+    """
+    have = median_bond_length(body)
+    if not have:
+        return body
+    f = target / have
+    pts = [(float(m.group(1)), float(m.group(2))) for m in _P_RE.finditer(body)]
+    if not pts:
+        return body
+    minx = min(x for x, _ in pts) * f
+    miny = min(y for _, y in pts) * f
+    maxx = max(x for x, _ in pts) * f
+    maxy = max(y for _, y in pts) * f
+    dx, dy = margin - minx, margin - miny
+
+    body = _P_RE.sub(
+        lambda m: 'p="%.2f %.2f"' % (float(m.group(1)) * f + dx,
+                                     float(m.group(2)) * f + dy), body)
+    if "<page" in body and "BoundingBox" not in body[body.index("<page"):
+                                                     body.index("<page") + 200]:
+        w, h = (maxx - minx) + 2 * margin, (maxy - miny) + 2 * margin
+        body = body.replace("<page", '<page BoundingBox="0 0 %.2f %.2f"' % (w, h), 1)
+    return body

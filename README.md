@@ -24,7 +24,7 @@ each registered with the Claude client rather than symlinked.
 
 | Connector | What it does |
 |---|---|
-| [`chemdraw`](mcp/chemdraw/) | Drives **ChemDraw** on macOS via its AppleScript dictionary: draw from SMILES, read formula/MW/exact mass/elemental analysis, Clean Up Structure, and export to PDF, EPS, TIFF, PNG, Molfile, CML. 9 tools. Used by `chemdraw-figures` to render. |
+| [`chemdraw`](mcp/chemdraw/) | Drives **ChemDraw** on macOS via its AppleScript dictionary: draw from SMILES, read formula/MW/exact mass/elemental analysis, Clean Up Structure, and export to PDF, EPS, TIFF, PNG, Molfile, CML. 10 tools. Used by `chemdraw-figures` to render. |
 
 **Why a connector and not just a driver.** ChemDraw has no batch mode and no
 command-line interface. The only programmatic route in is its AppleScript
@@ -37,11 +37,12 @@ whether Claude Code or Claude Desktop is asking.
 
 - **Claude Code** takes a stdio server directly —
   `claude mcp add --scope user chemdraw -- …`
-- **Claude Desktop** does *not* read `claude_desktop_config.json` for MCP
-  servers in current versions; local servers are installed as **extensions**.
-  Run `mcp/chemdraw/build.sh` to produce a `.mcpb` bundle and install it through
-  Settings → Extensions. Installations are integrity-hashed, so editing the
-  config by hand does not work — it is silently discarded on next launch.
+- **Claude Desktop** takes local servers either way. The one to use is an
+  **extension**: run `mcp/chemdraw/build.sh` for a `.mcpb` bundle and install it
+  through Settings → Extensions — on **1.40609.0** that upgrades in place and
+  reconnects with no app restart. `claude_desktop_config.json` also carries an
+  `mcpServers` record on that version, but it is only read at launch, so an edit
+  there does nothing until Desktop is quit and reopened.
 - **Claude Science** cannot host this connector at all: it declares no
   `com.apple.security.automation.apple-events` entitlement and sandboxes MCP
   servers, so it cannot send Apple events to a desktop app.
@@ -90,7 +91,7 @@ permission** for whichever app hosts Claude. Its `doctor` checks all of that:
 ```bash
 cd skills/chemdraw-figures
 python3 driver.py doctor      # ChemDraw, uv, RDKit, Apple events, connector
-python3 driver.py selftest    # 10 CDXML tests — needs no ChemDraw at all
+python3 driver.py selftest    # 23 CDXML tests — needs no ChemDraw at all
 ```
 
 A missing Automation grant surfaces as AppleEvent error `-1743`, which looks
@@ -108,6 +109,7 @@ follow (worth keeping):
   `config.json` documented by a committed `config.example.json`.
 - **`doctor` + `selftest`** — a setup check for prerequisites and offline
   parser tests, so the skill is testable before any real calculation runs.
+  `.github/workflows/selftest.yml` runs every skill's `selftest` on each push.
 - **Self-improvement** — a `record` subcommand that appends discovered
   workarounds to `SKILL.md` and `LEARNINGS.md`.
 
@@ -123,9 +125,18 @@ Two conventions worth keeping, both learned the hard way:
 - **One canonical copy of shared code.** `acs_style.py` lives with the skill and
   is copied into the bundle by `build.sh`, so the connector and the skill can
   never drift apart on house style.
-- **Absolute paths in `mcp_config`.** Clients spawn MCP servers without your
-  shell's `PATH`, so a bare `uv` will not resolve. Test the server the way the
-  client launches it — with a minimal environment — not from your own shell.
+- **Absolute paths in `mcp_config`, resolved at build time.** Clients spawn MCP
+  servers without your shell's `PATH`, so a bare `uv` will not resolve — but the
+  right absolute path differs per machine (Homebrew on Apple silicon vs Intel,
+  or uv's own `~/.local/bin`). `build.sh` resolves it and rewrites the manifest;
+  the committed manifest keeps a bare `uv` so no one machine's layout is baked
+  into the repo. `doctor` cross-checks an installed manifest against this
+  machine. Test the server the way the client launches it — with a minimal
+  environment — not from your own shell.
+- **Escape everything that reaches the host application.** An AppleScript
+  string literal ends at the first unescaped quote, and the rest of the value is
+  executed — `do shell script` included. Tool arguments are model-controlled, so
+  every path, name and command goes through one escaping helper.
 
 Undocumented behaviour of the host application belongs in the *skill's*
 `LEARNINGS.md`, dated and concrete, next to the code it explains.

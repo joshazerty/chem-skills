@@ -3,9 +3,9 @@
 Seven rhenium species around one cycle, ACS Document 1996 house style.
 Run:  python3 examples/catalytic_cycle.py <out.cdxml>
 """
-import sys, os, math
+import sys, os, math, collections
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from cdxml_build import Page, Frag, BL, pol
+from cdxml_build import Page, Frag, BL, pol, parse_formula
 import acs_style as A
 
 BLACK, GREY = A.BLACK, A.GREY
@@ -76,8 +76,12 @@ def s2():                                   # iPrO-ReO2(OH)O(-)
     m2 = f.at(ch, BL, 265, "C"); f.bond(ch, m2)
     return f
 
-def s3():                                   # HRe(O)(OH)O(-)
-    f, re = re_with([(180, 1, 0, 1), (90, 2, 0, None), (330, 1, -1, 0)])
+def s3():                                   # HReO2(OH)O(-)
+    # Two oxo, not one: 2 - acetone is H2ReO4(-), and it is H2ReO4(-) - H2O
+    # that gives ReO3(-) (species 4). With a single oxo the cycle loses an
+    # oxygen at TS2-3 and gains it back at TS3-4.
+    f, re = re_with([(180, 1, 0, 1), (90, 2, 0, None), (30, 2, 0, None),
+                     (330, 1, -1, 0)])
     h = f.at(re, BL, 250, "H"); f.bond(re, h)
     return f
 
@@ -99,8 +103,12 @@ def s6():                                   # diolate + Re(OH)2 O(-)
     f, re = re_with([(55, 1, 0, 1), (0, 1, 0, 1), (305, 1, -1, 0)])
     return diolate_ring(f, re)
 
-def s7():                                   # diolate + ReO2 O(-)
-    f, re = re_with([(55, 2, 0, None), (0, 2, 0, None), (305, 1, -1, 0)])
+def s7():                                   # diolate + ReO O(-)
+    # One oxo, not two. 6 -> 7 is a condensation: two Re-OH lose ONE water and
+    # leave ONE oxo (two oxo would be a loss of H2, not of H2O). It is also the
+    # Re(V) diolate that does the retro-[3+2]: extruding butadiene turns the
+    # two diolate oxygens into oxo ligands, giving back Re(VII) ReO4(-).
+    f, re = re_with([(55, 2, 0, None), (305, 1, -1, 0)])
     return diolate_ring(f, re)
 
 
@@ -118,18 +126,45 @@ SPECIES = [
     (s7, "7", -16,  -6,  -44, -38),
 ]
 
-# steps: (TS label, reagent line)
+# steps: (TS label, reagent line, gained, lost)
+# `gained`/`lost` are the formulas that make each step balance. They are not
+# decoration: check_balance() below asserts that species[i] + gained - lost is
+# exactly species[i+1], and driver.py selftest runs it. A cycle that silently
+# drops an oxygen is the one drawing error a reader will always catch.
 H2O = [("– H", A.ITALIC), ("2", A.SUB), ("O", A.ITALIC)]
 
 STEPS = [
-    ("TS1–2",  "+ iPrOH"),
-    ("TS2–3",  "– acetone"),
-    ("TS3–4",  H2O),
-    ("TS4–5",  "+ diol"),
-    ("TS5–6",  None),
-    ("TS6–7",  H2O),
-    ("TS7–1",  "– diene"),
+    ("TS1–2",  "+ iPrOH",   "C3H8O",  None),
+    ("TS2–3",  "– acetone", None,     "C3H6O"),
+    ("TS3–4",  H2O,         None,     "H2O"),
+    ("TS4–5",  "+ diol",    "C4H8O2", None),
+    ("TS5–6",  None,        None,     None),
+    ("TS6–7",  H2O,         None,     "H2O"),
+    ("TS7–1",  "– diene",   None,     "C4H6"),
 ]
+
+
+def check_balance():
+    """[(step label, imbalance)] for every step that does not balance; [] if all do."""
+    counts, charges = [], []
+    for fn, *_ in SPECIES:
+        n, q = fn().formula()
+        counts.append(n)
+        charges.append(q)
+    bad = []
+    for i, (ts, _reagent, gained, lost) in enumerate(STEPS):
+        lhs = collections.Counter(counts[i])
+        lhs.update(parse_formula(gained))
+        lhs.subtract(parse_formula(lost))
+        rhs = counts[(i + 1) % len(SPECIES)]
+        diff = collections.Counter(lhs)
+        diff.subtract(rhs)
+        diff = {k: v for k, v in diff.items() if v}
+        if charges[i] != charges[(i + 1) % len(SPECIES)]:
+            diff["charge"] = charges[i] - charges[(i + 1) % len(SPECIES)]
+        if diff:
+            bad.append((ts, diff))
+    return bad
 
 
 def build():
@@ -140,7 +175,7 @@ def build():
         p.text(ax + lx, ay + ly, lab, face=A.BOLD, size=11, color=BLACK)
 
     gap = 13.0
-    for i, (ts, reagent) in enumerate(STEPS):
+    for i, (ts, reagent, _gained, _lost) in enumerate(STEPS):
         a1 = ANG[i] - gap
         a2 = ANG[i] - 360.0 / N + gap
         p.curved_arrow(CX, CY, R - 4, a1, a2, color=BLACK)
@@ -156,5 +191,10 @@ def build():
 
 
 if __name__ == "__main__":
+    bad = check_balance()
+    if bad:
+        for ts, diff in bad:
+            print(f"UNBALANCED {ts}: {diff}", file=sys.stderr)
+        sys.exit(1)
     out = sys.argv[1] if len(sys.argv) > 1 else "cycle_a.cdxml"
     print(build().write(out))

@@ -4,7 +4,13 @@ Coordinates are in POINTS, with y increasing DOWNWARD (ChemDraw screen space).
 Helpers here take standard maths angles (y up) and flip internally, so callers
 can think in ordinary degrees.
 """
-import math, re, sys, os
+import collections, math, re, sys, os
+
+
+def esc(s: str) -> str:
+    """XML-escape text destined for a <s> run or an attribute value."""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;")
+                  .replace(">", "&gt;"))
 
 # acs_style sits beside this file when bundled into the skill, and one level up
 # in the connector checkout -- add both so either layout imports cleanly.
@@ -15,6 +21,12 @@ for _p in (_HERE, os.path.dirname(_HERE)):
 import acs_style as A
 
 BL = 14.4                      # ACS bond length, points
+
+# <arrow> geometry lives in Tail3D/Head3D ("x y z") and BoundingBox
+# ("x0 y0 x1 y1"), never in p="" -- fit() has to measure and move these too.
+_XYZ_RE = re.compile(r'\b(Tail3D|Head3D)="(-?[\d.]+) (-?[\d.]+) ([^"]*)"')
+_BOX_RE = re.compile(
+    r'\bBoundingBox="(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) (-?[\d.]+)"')
 
 def pol(r, deg):
     """Polar -> (dx, dy) in screen space (y down)."""
@@ -47,6 +59,41 @@ class Frag:
          "S": 16, "Cl": 17, "Br": 35, "I": 53, "Ru": 44, "Re": 75, "Ir": 77,
          "Pt": 78, "Au": 79, "Mo": 42, "W": 74, "V": 23, "Mn": 25, "Fe": 26}
 
+    # Standard valences for implicit-hydrogen counting. Metals are absent on
+    # purpose: give a metal centre an explicit nH (usually 0), because its
+    # valence is not a property of the element.
+    VALENCE = {"H": 1, "B": 3, "C": 4, "N": 3, "O": 2, "F": 1, "Si": 4,
+               "P": 3, "S": 2, "Cl": 1, "Br": 1, "I": 1}
+
+    def formula(self):
+        """(element counts, total charge), implicit hydrogens filled in.
+
+        Lets a scheme be checked for mass balance offline, which is the only
+        way a drawing error like "this step drops an oxygen" gets caught
+        before the figure reaches a referee.
+        """
+        deg = collections.defaultdict(int)
+        for i, j, order, _ in self.bonds:
+            o = order or 1
+            deg[i] += o
+            deg[j] += o
+        n = collections.Counter()
+        charge = 0
+        for k, (x, y, el, ch, nH, label) in enumerate(self.atoms):
+            n[el] += 1
+            charge += ch
+            if nH is not None:
+                n["H"] += nH
+                continue
+            if el not in self.VALENCE:
+                raise KeyError(f"{el!r} has no standard valence; pass nH "
+                               f"explicitly (metals always need it)")
+            # main group: a formal charge shifts the valence one way for
+            # electron-poor B, the other for C and everything to its right
+            v = self.VALENCE[el] + (-ch if el == "B" else ch)
+            n["H"] += max(0, v - deg[k])
+        return n, charge
+
     def xml(self, ox, oy, ids):
         Z = self.Z
         out = [f'<fragment id="{ids()}">']
@@ -73,7 +120,8 @@ class Frag:
                 out.append(
                     "<n " + " ".join(a) + ">"
                     f'<t p="{ox + x:.2f} {oy + y:.2f}" LabelAlignment="{al}">'
-                    f'<s font="{A.ARIAL}" size="10" face="{A.PLAIN}">{label}</s>'
+                    f'<s font="{A.ARIAL}" size="10" face="{A.PLAIN}">'
+                    f'{esc(label)}</s>'
                     "</t></n>")
         for (i, j, order, disp) in self.bonds:
             a = [f'id="{ids()}"', f'B="{idx[i]}"', f'E="{idx[j]}"']
@@ -84,6 +132,17 @@ class Frag:
             out.append("<b " + " ".join(a) + "/>")
         out.append("</fragment>")
         return "\n".join(out)
+
+
+_FORMULA_RE = re.compile(r"([A-Z][a-z]?)(\d*)")
+
+
+def parse_formula(text):
+    """'C3H8O' -> Counter({'C': 3, 'H': 8, 'O': 1}). None -> empty."""
+    n = collections.Counter()
+    for el, k in _FORMULA_RE.findall(text or ""):
+        n[el] += int(k) if k else 1
+    return n
 
 
 class Page:
@@ -99,22 +158,19 @@ class Page:
 
     def text(self, x, y, s, face=A.PLAIN, size=10, color=A.BLACK,
              just="Center", font=A.ARIAL):
-        esc = (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
         self.items.append(
             f'<t id="{self.ids()}" p="{x:.2f} {y:.2f}" '
             f'Justification="{just}" LineHeight="auto">'
             f'<s font="{font}" size="{size}" face="{face}" color="{color}">'
-            f'{esc}</s></t>')
+            f'{esc(s)}</s></t>')
 
     def runs(self, x, y, parts, just="Center", font=A.ARIAL, size=10,
              color=A.BLACK):
         """Text made of (string, face) runs -- e.g. H<sub>2</sub>O."""
         out = []
         for txt, face in parts:
-            esc = (txt.replace("&", "&amp;").replace("<", "&lt;")
-                      .replace(">", "&gt;"))
             out.append(f'<s font="{font}" size="{size}" face="{face}" '
-                       f'color="{color}">{esc}</s>')
+                       f'color="{color}">{esc(txt)}</s>')
         self.items.append(
             f'<t id="{self.ids()}" p="{x:.2f} {y:.2f}" '
             f'Justification="{just}" LineHeight="auto">' + "".join(out) + '</t>')
@@ -167,13 +223,22 @@ class Page:
         # repeating its point -- the same trick ChemDraw's own Shapes template
         # uses (it triples the first point of every curve). Without this the
         # arrowhead barbs round off into a blob.
+        #
+        # BOTH ends of the shaft-to-barb step need it, not just the barb. The
+        # step is radial (shaft/2 out to head_w/2 at the same angle), so a lone
+        # sample at the shaft end leaves the spline free to overshoot on its
+        # way into the tripled barb: the shaft swells and hooks just before the
+        # head, worst on the concave side where it reads as a lump against a
+        # 1.1 pt line. Tripling the shaft end too pins the corner flat.
         C = lambda q: [q, q, q]
+        outer = sweep(r + shaft / 2, a1, a_base)         # outer edge of shaft
+        inner = sweep(r - shaft / 2, a_base, a1)         # inner edge, back
         pts  = C(pt(r + shaft / 2, a1))                  # square tail, outer
-        pts += sweep(r + shaft / 2, a1, a_base)          # outer edge of shaft
+        pts += outer[:-1] + C(outer[-1])                 # ... into its corner
         pts += C(pt(r + head_w / 2, a_base))             # barb
         pts += C(pt(r, a2))                              # tip
         pts += C(pt(r - head_w / 2, a_base))             # barb
-        pts += sweep(r - shaft / 2, a_base, a1)          # inner edge, back
+        pts += C(inner[0]) + inner[1:]                   # corner, then back
         pts += C(pt(r - shaft / 2, a1))                  # square tail, inner
         coords = " ".join(f"{x:.2f} {y:.2f}" for x, y in pts)
         self.items.append(
@@ -210,6 +275,14 @@ class Page:
                 v = [float(t) for t in cp.group(1).split()]
                 for i in range(0, len(v) - 1, 2):
                     note(v[i], v[i + 1])
+            # <arrow> carries its geometry in Tail3D/Head3D, not in p="" --
+            # miss these and arrows are neither measured nor moved, so they
+            # end up displaced from the artwork and off the fitted page.
+            for m in _XYZ_RE.finditer(it):
+                note(float(m.group(2)), float(m.group(3)))
+
+        if not xs:
+            return self          # nothing drawn: leave the page as it is
 
         dx, dy = margin - min(xs), margin - min(ys)
         self.w = (max(xs) - min(xs)) + 2 * margin
@@ -224,9 +297,21 @@ class Page:
                            for i in range(0, len(v) - 1, 2))
             return f'CurvePoints="{out}"'
 
+        def shift_xyz(m):
+            return (f'{m.group(1)}="{float(m.group(2)) + dx:.2f} '
+                    f'{float(m.group(3)) + dy:.2f} {m.group(4)}"')
+
+        def shift_box(m):
+            return (f'BoundingBox="{float(m.group(1)) + dx:.2f} '
+                    f'{float(m.group(2)) + dy:.2f} '
+                    f'{float(m.group(3)) + dx:.2f} '
+                    f'{float(m.group(4)) + dy:.2f}"')
+
         self.items = [
-            re.sub(r'CurvePoints="([^"]+)"', shift_curve,
-                   re.sub(r'p="(-?[\d.]+) (-?[\d.]+)"', shift_p, it))
+            _BOX_RE.sub(shift_box,
+                _XYZ_RE.sub(shift_xyz,
+                    re.sub(r'CurvePoints="([^"]+)"', shift_curve,
+                           re.sub(r'p="(-?[\d.]+) (-?[\d.]+)"', shift_p, it))))
             for it in self.items]
         return self
 

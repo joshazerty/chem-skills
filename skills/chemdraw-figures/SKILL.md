@@ -14,7 +14,7 @@ Everything is checked by one script:
 
 ```bash
 python3 driver.py doctor      # prerequisites: ChemDraw, uv, RDKit, Automation, connector
-python3 driver.py selftest    # 10 offline tests; needs no ChemDraw
+python3 driver.py selftest    # 23 offline tests; needs no ChemDraw
 python3 driver.py build [dir] # render the worked example
 ```
 
@@ -33,7 +33,9 @@ draw(smiles="CC(=O)Oc1ccccc1C(=O)O", name="aspirin", export="png")
 ```
 
 Also available: `read_front_document`, `open_file`, `export`, `convert`,
-`clean_structure`, `run_command`, `list_commands`, `close_all`.
+`clean_structure`, `apply_acs_style`, `run_command`, `list_commands`,
+`close_all`. `name` arguments become filenames in `~/Documents/Claude/Inbox`,
+so they take letters, digits, space, `.`, `_` and `-` only — no paths.
 
 **A full scheme → author CDXML with the toolkit.** Anything with several
 structures, arrows and captions is built with `cdxml_build.py`:
@@ -55,6 +57,15 @@ p.curved_arrow(cx, cy, r, a1, a2)              # tapered arc arrow
 p.straight_arrow(x1, y1, x2, y2)               # plain reaction arrow
 p.fit(margin=11).write("scheme.cdxml")         # tight page box
 ```
+
+`fit()` is always last: it measures the artwork, shrinks the page to it and
+moves everything — fragments, captions, curved arrows and straight arrows
+alike — onto the new box. Add geometry after `fit()` and it will be off-page.
+
+Every structure carries a `formula()`: `Frag.formula()` returns element counts
+and total charge with implicit hydrogens filled in. **Use it to check a scheme
+balances before rendering** — see `check_balance()` in the worked example. A
+step that quietly drops an oxygen is the error a referee always catches.
 
 `examples/catalytic_cycle.py` is a complete worked example — a seven-species
 DODH catalytic cycle. **Read it before building a new scheme** and copy its
@@ -85,6 +96,9 @@ MediaBox. EPS already carries a correct BoundingBox.
 ACS column widths: single **3.25 in** (234 pt), double **7.00 in** (504 pt).
 Check the fitted page size and choose a radius that lands inside one.
 
+`crop_pdf.py <file.pdf>` rewrites the file **in place**; pass `-o out.pdf` to
+keep the original.
+
 ## Before writing any CDXML
 
 **Read `LEARNINGS.md`.** ChemDraw's CDXML importer does not behave the way the
@@ -95,7 +109,9 @@ invisible caption, subscripted nonsense. The three that bite first:
 - a caption left at the default face is in *formula* mode, not plain text
 - `color="1"` is **white**, not black — the attribute is offset by 2
 
-`driver.py selftest` asserts all three, so a regression is caught offline.
+`driver.py selftest` asserts all three — and twenty more, including that
+`fit()` moves straight arrows, that atom labels are XML-escaped, and that the
+worked cycle balances — so a regression is caught offline.
 
 ## House style
 

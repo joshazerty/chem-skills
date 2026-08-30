@@ -8,7 +8,7 @@ Design notes live in chemdraw_bridge.py; the empirically-derived quirks it
 works around (bundle-id addressing, activate-before-command, one-Apple-event-
 per-property, locale-formatted numbers) are the whole reason this layer exists.
 """
-import os, sys, json, tempfile, pathlib
+import os, re, sys, json, pathlib
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import chemdraw_bridge as cb
@@ -24,7 +24,20 @@ OUT_DIR = pathlib.Path(os.environ.get(
     "CHEMDRAW_OUT_DIR", os.path.expanduser("~/Documents/Claude/Inbox")))
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Tool arguments are model-controlled, so a `name` must not be able to walk
+# out of OUT_DIR: _out("../../../.ssh/authorized_keys") would otherwise be a
+# path save_as() happily overwrites.
+_SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,127}$")
+
 def _out(name: str) -> str:
+    # Two layers on purpose. The pattern says what a name may BE -- a plain
+    # filename, no separators -- and safe_output_path() checks where the name
+    # LANDS after resolution, which is the only thing that catches a symlink
+    # already sitting in OUT_DIR and pointing somewhere else.
+    if not _SAFE_NAME.match(name or "") or ".." in name:
+        raise ValueError(
+            f"invalid name {name!r}: letters, digits, space, dot, underscore "
+            f"and hyphen only, and no path separators")
     return cb.safe_output_path(OUT_DIR, name)
 
 
@@ -108,12 +121,11 @@ def run_command(command: str) -> str:
     """
     cb.select_all()
     try:
-        cb.do_command(command)
+        cb.do_command(command)          # validates the name, then escapes it
         return f"ran {command}"
     except cb.ChemDrawError as e:
         try:
-            en = cb.tell('return (enabled of command '
-                         f'"{cb.esc(command)}") as text')
+            en = cb.command_enabled(command)
         except cb.ChemDrawError:
             return f"no such command {command!r}; use list_commands to find it"
         if en == "false":
@@ -135,6 +147,17 @@ return out''', timeout=120).splitlines()
     if search:
         names = [n for n in names if search.lower() in n.lower()]
     return json.dumps(sorted(set(filter(None, names))), indent=2)
+
+
+@mcp.tool()
+def apply_acs_style() -> str:
+    """Force ACS Document 1996 house style onto the front ChemDraw document.
+
+    Use after opening a .cdx/.cdxml drawn elsewhere: sets the 14.4 pt bond
+    length, 0.6 pt lines and Arial 10 pt labels of the ACS stationery.
+    """
+    cb.apply_acs()
+    return "ACS Document 1996 style applied"
 
 
 @mcp.tool()
