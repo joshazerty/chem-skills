@@ -60,12 +60,8 @@ claude mcp list        # chemdraw: … ✔ Connected
 Use an absolute `uv` (as `command -v` gives): clients spawn MCP servers without
 your shell's `PATH`.
 
-**Claude Desktop** — install it as an **extension**. On the version tested
-(ChemDraw 25.0.2 era, 2026-08), edits to `claude_desktop_config.json` did not
-bring this server up, and `extensions-installations.json` is integrity-hashed,
-so hand-editing that file is discarded on next launch. Check your own version's
-behaviour before concluding the config route is unavailable to you. Build a
-bundle and install it through the UI:
+**Claude Desktop** — install it as an **extension**. Build a bundle and install
+it through the UI:
 
 ```bash
 ./build.sh                     # → chemdraw.mcpb
@@ -73,7 +69,29 @@ bundle and install it through the UI:
 
 `build.sh` resolves `uv` on this machine and bakes that absolute path into the
 bundled manifest, so the bundle works on Apple silicon, Intel and a `~/.local`
-install alike. Override with `UV_BIN=/path/to/uv ./build.sh`.
+install alike. Override with `UV_BIN=/path/to/uv ./build.sh`. It resolves the
+uv *directory* and keeps the name as `command -v` gave it: following the last
+symlink would bake Homebrew's `/opt/homebrew/Cellar/uv/<version>/bin/uv`, which
+the next `brew upgrade uv` deletes. `driver.py doctor` reads back the command
+each client will really spawn and checks it is still executable.
+
+Installing over an earlier version of the same bundle is an in-place upgrade:
+on **Claude Desktop 1.40609.0** the server was restarted and re-registered
+immediately, with no app restart (`~/Library/Logs/Claude/mcp-server-*.log`
+shows the new process connecting). The extension's own record lives in
+`extensions-installations.json`, which carries a per-extension integrity hash —
+install bundles through the UI rather than editing that file.
+
+`claude_desktop_config.json` (in `~/Library/Application Support/Claude/`) **is**
+read for local MCP servers on this version: 1.40609.0's app-config schema
+carries an `mcpServers` record alongside `claudeAiUrl` and `globalShortcut`, it
+validates each entry and pops a dialog naming any it skipped ("entries in
+claude_desktop_config.json are not valid MCP server configurations"), and it
+writes non-extension servers back into that same file. That is read out of the
+shipped 1.40609.0 bundle rather than observed over a restart, and the file is
+only re-read at launch, so an edit does nothing until Claude Desktop is quit and
+reopened. The extension route is still the one to prefer here — it is what
+`build.sh` targets, and it survives without a restart.
 
 The manifest declares `manifest_version: "0.2"` — `@anthropic-ai/mcpb`'s
 `DEFAULT_MANIFEST_VERSION`, validated against that package's shipped

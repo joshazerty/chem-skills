@@ -37,12 +37,12 @@ whether Claude Code or Claude Desktop is asking.
 
 - **Claude Code** takes a stdio server directly —
   `claude mcp add --scope user chemdraw -- …`
-- **Claude Desktop** installs local servers as **extensions**. Run
-  `mcp/chemdraw/build.sh` to produce a `.mcpb` bundle and install it through
-  Settings → Extensions. On the version tested, `claude_desktop_config.json`
-  edits did not bring the server up, and `extensions-installations.json` is
-  integrity-hashed, so hand-editing it is discarded on next launch — check your
-  own version rather than assuming.
+- **Claude Desktop** takes local servers either way. The one to use is an
+  **extension**: run `mcp/chemdraw/build.sh` for a `.mcpb` bundle and install it
+  through Settings → Extensions — on **1.40609.0** that upgrades in place and
+  reconnects with no app restart. `claude_desktop_config.json` also carries an
+  `mcpServers` record on that version, but it is only read at launch, so an edit
+  there does nothing until Desktop is quit and reopened.
 - **Claude Science** cannot host this connector at all: it declares no
   `com.apple.security.automation.apple-events` entitlement and sandboxes MCP
   servers, so it cannot send Apple events to a desktop app.
