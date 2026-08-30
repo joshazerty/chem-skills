@@ -75,6 +75,12 @@ bundle and install it through the UI:
 bundled manifest, so the bundle works on Apple silicon, Intel and a `~/.local`
 install alike. Override with `UV_BIN=/path/to/uv ./build.sh`.
 
+The manifest declares `manifest_version: "0.2"` — `@anthropic-ai/mcpb`'s
+`DEFAULT_MANIFEST_VERSION`, validated against that package's shipped
+`mcpb-manifest-v0.2.schema.json`. `dxt_version` is the deprecated alias for the
+same field and is pinned by the schema to the *same* value, so the two must
+never both be set; `selftest` asserts exactly one is present.
+
 Then Claude Desktop → Settings → Extensions → Advanced settings → Install
 extension, or drag `chemdraw.mcpb` onto the window.
 

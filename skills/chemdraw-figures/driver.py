@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import xml.etree.ElementTree as ET
+import ast as ET_ast
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -301,6 +302,27 @@ def selftest():
     _report(not unbalanced, "worked cycle balances",
             "every step conserves atoms and charge" if not unbalanced
             else "; ".join(f"{ts} off by {d}" for ts, d in unbalanced))
+
+    # 18. the bundle manifest: exactly ONE version key (manifest_version and
+    #     its deprecated alias dxt_version are alternates pinned to the SAME
+    #     value by the mcpb schema, so setting both is invalid, not tolerant),
+    #     and a tool list that has not drifted from the server's decorators
+    import json as _json
+    mf = os.path.join(HERE, "..", "..", "mcp", "chemdraw", "manifest.json")
+    sv = os.path.join(HERE, "..", "..", "mcp", "chemdraw", "chemdraw_server.py")
+    man = _json.load(open(mf, encoding="utf-8"))
+    keys = [k for k in ("manifest_version", "dxt_version") if k in man]
+    declared = [t["name"] for t in man.get("tools", [])]
+    tree = ET_ast.parse(open(sv, encoding="utf-8").read())
+    actual = [n.name for n in ET_ast.walk(tree)
+              if isinstance(n, ET_ast.FunctionDef)
+              and any(getattr(getattr(d, "func", d), "attr", "") == "tool"
+                      for d in n.decorator_list)]
+    _report(keys == ["manifest_version"] and declared == actual,
+            "manifest matches the server",
+            f"{len(actual)} tools, one version key ({', '.join(keys)})"
+            if keys == ["manifest_version"] and declared == actual else
+            f"version keys {keys}; declared {declared} vs actual {actual}")
 
     print("\n" + ("selftest: FAIL" if _fails else "selftest: PASS"))
     return 1 if _fails else 0

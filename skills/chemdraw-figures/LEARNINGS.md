@@ -10,6 +10,17 @@ shipped template files. None of it is documented, and every one of these fails
 *silently* — a blank page, an invisible caption, a mangled label. Each has a
 matching assertion in `driver.py selftest`.
 
+### 2026-08-30 — `.mcpb` manifest: one version key, never both
+`manifest_version` and `dxt_version` look like a new name and an old one worth
+setting together for compatibility. They are not: in every schema shipped by
+`@anthropic-ai/mcpb` (v0.1 through v0.4) *both* are `const`-pinned to that
+schema's own version, so `manifest_version: "0.2"` alongside `dxt_version:
+"0.1"` validates against no schema at all. Use `manifest_version` alone —
+`dxt_version` is marked `@deprecated` — at `DEFAULT_MANIFEST_VERSION`, which is
+`0.2`. `selftest` asserts exactly one key is present, and that the manifest's
+`tools` list still matches the server's `@mcp.tool()` decorators, which is the
+other thing that silently drifts.
+
 ### 2026-08-30 — `fit()` has to move arrows, which hide their geometry
 `<arrow>` keeps its endpoints in `Tail3D`/`Head3D` (`"x y z"`) and its extent in
 `BoundingBox`, never in `p=""`. A page-fitting pass that rewrites only `p=""`
