@@ -5,6 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![selftest](https://img.shields.io/github/actions/workflow/status/joshazerty/chem-skills/selftest.yml?branch=main&label=selftest)](https://github.com/joshazerty/chem-skills/actions/workflows/selftest.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22030968.svg)](https://doi.org/10.5281/zenodo.22030968)
 
 Computational-chemistry [Claude Code](https://claude.com/claude-code) skills.
 Each skill is a self-contained directory under [`skills/`](skills/) with a
