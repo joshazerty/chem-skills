@@ -1,0 +1,38 @@
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+*{box-sizing:border-box;margin:0}
+html,body{width:1280px;height:640px;overflow:hidden;background:#070a16}
+body{background:#070a16;color:#eceae6;font-family:'Instrument Sans',-apple-system,Arial,sans-serif;
+     -webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace}
+.gold{color:#ffd166}
+.surf{position:absolute;background-size:contain;background-repeat:no-repeat;background-position:center}
+</style><style>
+.frame{position:relative;width:1280px;height:512px;top:64px}
+.log{position:absolute;left:72px;top:142px;width:470px}
+.log li{list-style:none;display:flex;gap:16px;align-items:baseline;padding:11px 0;
+        border-bottom:1px solid rgba(255,255,255,.07);font-size:17px;letter-spacing:.01em}
+.log li:last-child{border-bottom:0}
+.tick{width:17px;flex:none;color:#ffd166;font-size:15px}
+.what{color:#c9cbd6;white-space:nowrap}
+.val{margin-left:auto;color:#8b8fa3;font-size:15px;white-space:nowrap}
+.title{position:absolute;left:72px;top:100px;font-size:14px;letter-spacing:.2em;
+        text-transform:uppercase;color:#ffd166}
+.surf{right:-116px;top:-10px;width:800px;height:530px;background-image:url(surface.png)}
+.tie{position:absolute;left:0;top:0;width:1280px;height:512px}
+</style>
+<div class="frame">
+  <div class="surf"></div>
+  <svg class="tie"><g stroke="#ffd166" stroke-opacity=".34" stroke-width="1" fill="none">
+    <path d="M560 249 C706 249 806 306 964 324"/>
+    <path d="M560 335 C694 335 784 392 874 402"/>
+  </g></svg>
+  <p class="title mono">run-ts-finder</p>
+  <ul class="log mono">
+    <li><span class="tick">&#9656;</span><span class="what">growing string, 11 nodes</span><span class="val">g-xTB</span></li>
+    <li><span class="tick">&#10003;</span><span class="what">saddle located</span><span class="val">ORCA</span></li>
+    <li><span class="tick">&#10003;</span><span class="what">one imaginary frequency</span><span class="val">&#8722;412 cm&#8315;&#185;</span></li>
+    <li><span class="tick">&#10003;</span><span class="what">mode &#8226; reaction vector</span><span class="val">0.96</span></li>
+    <li><span class="tick">&#10003;</span><span class="what">IRC reaches both endpoints</span><span class="val">&#916;G&#8225; 18.4</span></li>
+  </ul>
+</div>
