@@ -1,3 +1,5 @@
+![chem-skills — an agent log beside the potential energy surface it produced: the imaginary frequency tied to the saddle, the IRC to the endpoint it reached.](.github/social/social-preview.png)
+
 # chem-skills
 
 Computational-chemistry [Claude Code](https://claude.com/claude-code) skills.
