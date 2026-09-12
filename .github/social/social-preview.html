@@ -5,25 +5,25 @@ html,body{width:1280px;height:640px;overflow:hidden;background:#ffffff}
 body{color:#16181d;font-family:'Instrument Sans',-apple-system,Arial,sans-serif;-webkit-font-smoothing:antialiased}
 .mono{font-family:'JetBrains Mono',ui-monospace,monospace}
 .frame{position:relative;width:1280px;height:640px}
-.surf{position:absolute;right:-104px;top:44px;width:830px;height:552px;
+.surf{position:absolute;right:-96px;top:-18px;width:872px;height:676px;
   background-image:url(surface.png);background-size:contain;
   background-repeat:no-repeat;background-position:center}
-.brand{position:absolute;left:80px;top:148px;font-size:34px;color:#b45309;letter-spacing:-.01em}
-.sub{position:absolute;left:80px;top:196px;font-size:15px;color:#6b7280;letter-spacing:.14em;text-transform:uppercase}
-.log{position:absolute;left:80px;top:248px;width:486px}
-.log li{list-style:none;display:flex;gap:16px;align-items:baseline;padding:12px 0;
-  border-bottom:1px solid rgba(16,24,40,.10);font-size:18px;letter-spacing:.01em}
+.brand{position:absolute;left:64px;top:66px;font-size:46px;color:#b45309;letter-spacing:-.015em;line-height:1}
+.sub{position:absolute;left:64px;top:128px;font-size:17px;color:#6b7280;letter-spacing:.16em;text-transform:uppercase}
+.log{position:absolute;left:64px;top:184px;width:548px}
+.log li{list-style:none;display:flex;gap:18px;align-items:baseline;padding:14px 0;
+  border-bottom:1px solid rgba(16,24,40,.11);font-size:25px;letter-spacing:.01em}
 .log li:last-child{border-bottom:0}
-.tick{width:18px;flex:none;color:#b45309;font-size:16px}
+.tick{width:24px;flex:none;color:#b45309;font-size:22px}
 .what{color:#2c3242;white-space:nowrap}
-.val{margin-left:auto;color:#6b7280;font-size:16px;white-space:nowrap}
+.val{margin-left:auto;color:#6b7280;font-size:21px;white-space:nowrap}
 .tie{position:absolute;left:0;top:0;width:1280px;height:640px}
 </style>
 <div class="frame">
   <div class="surf"></div>
-  <svg class="tie"><g stroke="#b45309" stroke-opacity=".45" stroke-width="1" fill="none">
-    <path d="M580 361 C742 361 852 384 942 393"/>
-    <path d="M580 452 C700 452 792 468 846 473"/>
+  <svg class="tie"><g stroke="#b45309" stroke-opacity=".45" stroke-width="1.2" fill="none">
+    <path d="M626 329 C762 329 852 380 916 394"/>
+    <path d="M626 446 C722 446 782 470 812 479"/>
   </g></svg>
   <p class="brand mono">chem-skills</p>
   <p class="sub mono">run-ts-finder</p>
