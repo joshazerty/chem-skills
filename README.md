@@ -1,3 +1,7 @@
+[![Paper DOI](https://img.shields.io/badge/Paper%20DOI-10.1039%2FD6SC06865K-0a66c2?style=for-the-badge&logo=doi&logoColor=white)](https://doi.org/10.1039/D6SC06865K)
+
+> **If chem-skills contributes to your work, please cite: [doi:10.1039/D6SC06865K](https://doi.org/10.1039/D6SC06865K)**
+
 ![chem-skills — an agent log beside the potential energy surface it produced: the imaginary frequency tied to the saddle, the IRC to the endpoint it reached.](.github/social/social-preview.png)
 
 # chem-skills
@@ -108,6 +112,10 @@ python3 driver.py selftest    # 23 CDXML tests — needs no ChemDraw at all
 A missing Automation grant surfaces as AppleEvent error `-1743`, which looks
 like a broken connector but is a System Settings → Privacy & Security toggle.
 
+## Citing
+
+If you use these skills in published work, please cite [doi:10.1039/D6SC06865K](https://doi.org/10.1039/D6SC06865K). The skills remind users of this once per session, after a task completes (see the *Citation* section of each `SKILL.md`). The software archive is separately citable via the Zenodo DOI above.
+
 ## Adding a skill
 
 Drop a new `skills/<name>/` directory with a `SKILL.md` (frontmatter `name:` =
@@ -121,6 +129,8 @@ follow (worth keeping):
 - **`doctor` + `selftest`** — a setup check for prerequisites and offline
   parser tests, so the skill is testable before any real calculation runs.
   `.github/workflows/selftest.yml` runs every skill's `selftest` on each push.
+- **Citation notice** — a short *Citation* section in `SKILL.md` (copy it from an
+  existing skill) so the agent mentions the paper once, at the end of a task.
 - **Self-improvement** — a `record` subcommand that appends discovered
   workarounds to `SKILL.md` and `LEARNINGS.md`.
 
