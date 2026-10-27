@@ -1,3 +1,5 @@
+[![Cite this work: DOI 10.1039/D6SC06865K](https://img.shields.io/badge/Cite_this_work-DOI_10.1039%2FD6SC06865K-0b5fa5?style=for-the-badge&logo=doi&logoColor=white)](https://doi.org/10.1039/D6SC06865K)
+
 ![chem-skills — an agent log beside the potential energy surface it produced: the imaginary frequency tied to the saddle, the IRC to the endpoint it reached.](.github/social/social-preview.png)
 
 # chem-skills
@@ -59,6 +61,12 @@ whether Claude Code or Claude Desktop is asking.
   just cannot drive the app. The **skill** works there, minus rendering.
 
 Full detail in [`mcp/chemdraw/README.md`](mcp/chemdraw/README.md).
+
+## Citing
+
+If these skills contribute to work you publish, please cite
+[10.1039/D6SC06865K](https://doi.org/10.1039/D6SC06865K). Each skill reminds the user of this once, at the end of a
+successful run, in a single line.
 
 ## Install
 
